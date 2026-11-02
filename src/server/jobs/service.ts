@@ -157,14 +157,14 @@ export async function submitWork(jobId: string, prUrl: string): Promise<void> {
     files: snapshot.files.length,
     ci: snapshot.ci.state,
   });
-
-  await runVerification(jobId);
+  // Verification takes minutes on a slow model; the caller runs it in the background.
 }
 
 /** Verify the latest submission. Safe to retry if the AI call failed. */
 export async function runVerification(jobId: string): Promise<void> {
   const job = await loadJob(jobId);
   if (job.status !== "submitted") throw new JobError(`Nothing to verify (status: ${job.status}).`);
+  await logEvent(jobId, "ai", "verification.started");
 
   const submission = await db().query.submissions.findFirst({
     where: eq(schema.submissions.jobId, jobId),

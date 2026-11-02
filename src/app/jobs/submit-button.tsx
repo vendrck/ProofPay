@@ -8,14 +8,16 @@ export function SubmitButton({
   children,
   pending,
   variant = "primary",
+  block = false,
 }: {
   children: ReactNode;
   pending: string;
-  variant?: "primary" | "secondary" | "link";
+  variant?: "primary" | "secondary" | "link" | "paypal";
+  block?: boolean;
 }) {
   const { pending: isPending } = useFormStatus();
   return (
-    <button type="submit" className={`btn btn-${variant}`} disabled={isPending} aria-busy={isPending}>
+    <button type="submit" className={`btn btn-${variant}${block ? " btn-block" : ""}`} disabled={isPending} aria-busy={isPending}>
       {isPending ? pending : children}
     </button>
   );

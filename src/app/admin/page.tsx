@@ -1,11 +1,11 @@
 import Link from "next/link";
+import { LocalTime } from "@/components/local-time";
 import { after } from "next/server";
 import { StatusBadge } from "@/app/jobs/status-badge";
 import { requireAdmin } from "@/server/admin/auth";
-import { formatMoney } from "@/server/escrow/money";
+import { displayMoney } from "@/lib/labels";
 import { listDisputeRows } from "@/server/disputes/service";
 import { adminQueue, checkHolds } from "@/server/jobs/settlement";
-import { jobMoney } from "@/server/jobs/store";
 import { SubmitButton } from "@/app/jobs/submit-button";
 import { logoutAction } from "./actions";
 
@@ -28,59 +28,99 @@ export default async function AdminPage() {
   return (
     <main className="container">
       <div className="page-head">
-        <h1>Admin queue</h1>
+        <div>
+          <h1>Admin queue</h1>
+          <p className="muted" style={{ margin: "4px 0 0" }}>
+            Nothing moves money until you approve it here.
+          </p>
+        </div>
         <form action={logoutAction}>
           <SubmitButton variant="secondary" pending="Signing out…">
             Sign out
           </SubmitButton>
         </form>
       </div>
-      <p className="muted">Nothing moves money until you approve it here.</p>
-      <p>
-        <Link href="/admin/disputes">PayPal disputes</Link>{" "}
-        <span className={`badge badge-${openDisputes ? "warn" : "good"}`}>{openDisputes} awaiting a response</span>
-      </p>
-      {expiring.length > 0 && (
-        <section className="card">
-          <h2>Holds about to expire</h2>
-          <p className="muted small">
-            PayPal holds last 29 days. Settle these before then, or the client has to fund the job again.
-          </p>
-          <ul className="list">
-            {expiring.map(({ job, daysLeft, expiresAt }) => (
-              <li key={job.id}>
-                <Link href={`/jobs/${job.id}`} className="list-row">
-                  <span className="list-title">
-                    {job.title}
-                    <span className="hint"> · expires {expiresAt.toLocaleDateString()}</span>
-                  </span>
-                  <span className="list-meta">{daysLeft === 0 ? "today" : `${daysLeft} day(s) left`}</span>
-                  <StatusBadge status={job.status} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+
+      <div className="stats">
+        <div>
+          <b>{queue.length}</b>
+          <span>waiting for a decision</span>
+        </div>
+        <div>
+          <b>{expiring.length}</b>
+          <span>holds expiring soon</span>
+        </div>
+        <Link href="/admin/disputes">
+          <b>{openDisputes}</b>
+          <span>PayPal disputes to answer →</span>
+        </Link>
+      </div>
+
+      <div className="list-head">
+        <h2>Waiting for you</h2>
+      </div>
       {queue.length === 0 ? (
-        <p className="muted">Nothing waiting. 🎉</p>
+        <p className="muted">Nothing waiting.</p>
       ) : (
-        <ul className="list">
-          {queue.map((job) => (
-            <li key={job.id}>
-              <Link href={`/jobs/${job.id}`} className="list-row">
-                <span className="list-title">
-                  {job.title}
-                  <span className="hint"> · {WHY[job.status]}</span>
-                </span>
-                <span className="list-meta">
-                  {formatMoney(jobMoney(job))} {job.currency}
-                </span>
-                <StatusBadge status={job.status} />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Why it&apos;s here</th>
+              <th>Status</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {queue.map((job) => (
+              <tr key={job.id}>
+                <td>
+                  <Link href={`/jobs/${job.id}`}>{job.title}</Link>
+                </td>
+                <td className="muted">{WHY[job.status]}</td>
+                <td>
+                  <StatusBadge status={job.status} />
+                </td>
+                <td className="num">{displayMoney(job.amountMinor, job.currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {expiring.length > 0 && (
+        <>
+          <div className="list-head">
+            <h2>Holds about to expire</h2>
+            <span className="small muted">PayPal holds last 29 days. Settle these first.</span>
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th className="num">Days left</th>
+              </tr>
+            </thead>
+            <tbody>
+              {expiring.map(({ job, daysLeft, expiresAt }) => (
+                <tr key={job.id}>
+                  <td>
+                    <Link href={`/jobs/${job.id}`}>{job.title}</Link>
+                  </td>
+                  <td>
+                    <LocalTime date={expiresAt} dateOnly />
+                  </td>
+                  <td>
+                    <StatusBadge status={job.status} />
+                  </td>
+                  <td className="num">{daysLeft === 0 ? "today" : daysLeft}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </main>
   );

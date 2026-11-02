@@ -1,16 +1,11 @@
 import Link from "next/link";
+import { paypalLabel } from "@/lib/labels";
 import { SubmitButton } from "@/app/jobs/submit-button";
 import { requireAdmin } from "@/server/admin/auth";
 import { listDisputeRows, type StoredDraft } from "@/server/disputes/service";
 import { syncDisputesAction } from "../actions";
 
 export const dynamic = "force-dynamic";
-
-const READABLE_REASON: Record<string, string> = {
-  MERCHANDISE_OR_SERVICE_NOT_RECEIVED: "Not received",
-  MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED: "Not as described",
-  UNAUTHORISED: "Unauthorised",
-};
 
 export default async function DisputesPage({
   searchParams,
@@ -33,7 +28,7 @@ export default async function DisputesPage({
           </SubmitButton>
         </form>
       </div>
-      <p className="muted">
+      <p className="muted" style={{ marginTop: -8 }}>
         Claims buyers filed with PayPal after money was released. The copilot drafts each response from the audit trail;
         nothing reaches PayPal until you submit it.
       </p>
@@ -48,32 +43,45 @@ export default async function DisputesPage({
       {rows.length === 0 ? (
         <p className="muted">No disputes yet.</p>
       ) : (
-        <ul className="list">
-          {rows.map((d) => {
-            const draft = d.copilotDraft as StoredDraft | null;
-            return (
-              <li key={d.id}>
-                <Link href={`/admin/disputes/${d.id}`} className="list-row">
-                  <span className="list-title">
-                    <span className="mono">{d.paypalDisputeId}</span>
-                    <span className="hint">
-                      {" "}
-                      · {READABLE_REASON[d.reason ?? ""] ?? d.reason} · {d.jobId ? "linked to a job" : "no matching job"}
-                    </span>
-                  </span>
-                  <span className="list-meta">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Dispute</th>
+              <th>Reason</th>
+              <th>Job</th>
+              <th>Copilot</th>
+              <th>PayPal status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((d) => {
+              const draft = d.copilotDraft as StoredDraft | null;
+              return (
+                <tr key={d.id}>
+                  <td>
+                    <Link href={`/admin/disputes/${d.id}`} className="mono">
+                      {d.paypalDisputeId}
+                    </Link>
+                  </td>
+                  <td>{paypalLabel(d.reason)}</td>
+                  <td className="muted">{d.jobId ? "Linked" : "No match"}</td>
+                  <td className="muted">
                     {d.decision !== "pending"
-                      ? "answered"
+                      ? "Answered"
                       : draft
-                        ? `draft: ${draft.action.replace("_", " ")}`
-                        : "no draft yet"}
-                  </span>
-                  <span className={`badge badge-${d.decision === "pending" ? "warn" : "good"}`}>{d.status}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+                        ? draft.action === "accept_claim"
+                          ? "Draft: accept claim"
+                          : "Draft: send evidence"
+                        : "No draft yet"}
+                  </td>
+                  <td>
+                    <span className={`badge badge-${d.decision === "pending" ? "warn" : "good"}`}>{paypalLabel(d.status)}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
     </main>
   );

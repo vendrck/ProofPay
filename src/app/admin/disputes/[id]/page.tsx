@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { LocalTime } from "@/components/local-time";
+import { paypalLabel } from "@/lib/labels";
 import { notFound } from "next/navigation";
 import { SubmitButton } from "@/app/jobs/submit-button";
 import { requireAdmin } from "@/server/admin/auth";
@@ -34,7 +36,7 @@ export default async function DisputePage({
       </Link>
       <div className="page-head">
         <h1 className="mono">{row.paypalDisputeId}</h1>
-        <span className={`badge badge-${pending ? "warn" : "good"}`}>{live?.status ?? row.status}</span>
+        <span className={`badge badge-${pending ? "warn" : "good"}`}>{paypalLabel(live?.status ?? row.status)}</span>
       </div>
       {error && <p className="alert alert-error">{error}</p>}
       {drafting && (
@@ -47,13 +49,13 @@ export default async function DisputePage({
         <h2>Claim</h2>
         <dl className="facts">
           <dt>Reason</dt>
-          <dd>{row.reason}</dd>
+          <dd>{paypalLabel(row.reason)}</dd>
           <dt>Stage</dt>
-          <dd>{live?.dispute_life_cycle_stage ?? "unknown"}</dd>
+          <dd>{paypalLabel(live?.dispute_life_cycle_stage)}</dd>
           <dt>Amount</dt>
           <dd>{live?.dispute_amount ? `${live.dispute_amount.value} ${live.dispute_amount.currency_code}` : "unknown"}</dd>
           <dt>Respond by</dt>
-          <dd>{row.responseDueAt?.toLocaleString() ?? "unknown"}</dd>
+          <dd>{row.responseDueAt ? <LocalTime date={row.responseDueAt} /> : "unknown"}</dd>
           <dt>Job</dt>
           <dd>{job ? <Link href={`/jobs/${job.id}`}>{job.title}</Link> : "No job matches the disputed transaction"}</dd>
         </dl>
@@ -63,7 +65,7 @@ export default async function DisputePage({
             <ul className="small">
               {live!.messages!.map((m) => (
                 <li key={m.time_posted + m.content.slice(0, 20)}>
-                  <span className="muted">{new Date(m.time_posted).toLocaleString()} · {m.posted_by}:</span> {m.content}
+                  <span className="muted"><LocalTime date={m.time_posted} /> · {paypalLabel(m.posted_by)}:</span> {m.content}
                 </li>
               ))}
             </ul>
@@ -91,7 +93,7 @@ export default async function DisputePage({
             )}
             <p className="small muted">
               Drafted by {draft.model} {draft.investigated ? "after checking PayPal through MCP" : "from platform records only"}{" "}
-              · {new Date(draft.draftedAt).toLocaleString()}
+              · <LocalTime date={draft.draftedAt} />
             </p>
           </div>
         ) : (
@@ -154,7 +156,7 @@ export default async function DisputePage({
         <section className="card">
           <h2>Answered</h2>
           <p>
-            Submitted {row.submittedAt?.toLocaleString()} ·{" "}
+            Submitted {row.submittedAt && <LocalTime date={row.submittedAt} />} ·{" "}
             {row.decision === "approved" ? "copilot draft sent as written" : "edited by the admin before sending"}.
           </p>
         </section>

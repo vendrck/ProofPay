@@ -1,40 +1,87 @@
 import Link from "next/link";
+import { HeroIllustration, StepIcon } from "@/components/illustrations";
 
 const STEPS = [
-  { title: "Agree", body: "AI turns the job brief into acceptance criteria both sides can check." },
-  { title: "Fund", body: "The client's PayPal payment is authorized and held — not charged yet." },
-  { title: "Verify", body: "AI checks the delivered work against every criterion, with reasons." },
-  { title: "Release", body: "An admin approves; PayPal captures and the freelancer is paid out." },
-  { title: "Defend", body: "Appeals and PayPal disputes get a drafted response from the evidence trail." },
-];
+  { icon: "agree", title: "Agree", body: "AI turns the brief into acceptance criteria both sides can check." },
+  { icon: "fund", title: "Fund", body: "The client's PayPal payment is authorized and held, not charged." },
+  { icon: "deliver", title: "Deliver", body: "The freelancer submits the work as a GitHub pull request." },
+  { icon: "verify", title: "Verify", body: "AI checks the work against every criterion and explains why." },
+  { icon: "release", title: "Release", body: "An admin approves; PayPal captures and pays the freelancer." },
+  { icon: "defend", title: "Defend", body: "Appeals and PayPal disputes get a response drafted from the record." },
+] as const;
 
 export default function HomePage() {
   return (
-    <main className="container">
-      <header className="hero">
-        <p className="eyebrow">PayPal AI Hackathon</p>
-        <h1>ProofPay</h1>
-        <p className="lede">Escrow for freelance work. AI verifies the delivery; PayPal holds and releases the money.</p>
-        <div className="hero-cta">
-          <Link className="btn btn-primary" href="/jobs/new">
-            Start a job
-          </Link>
-          <Link className="btn btn-secondary" href="/jobs">
-            View jobs
-          </Link>
-        </div>
-      </header>
-      <ol className="steps">
-        {STEPS.map((step, i) => (
-          <li key={step.title}>
-            <span className="step-number">{i + 1}</span>
-            <div>
-              <h2>{step.title}</h2>
-              <p>{step.body}</p>
+    <main>
+      <section className="hero-band">
+        <div className="hero">
+          <div>
+            <p className="eyebrow">Escrow for freelance work</p>
+            <h1>
+              Get paid when the work is <em>proven</em>, not when someone remembers.
+            </h1>
+            <p className="lede">
+              The client&apos;s money is held by PayPal. AI checks the pull request against the agreed criteria. A person
+              approves the release, and PayPal pays the freelancer out.
+            </p>
+            <div className="hero-cta">
+              <Link className="btn btn-primary" href="/jobs/new">
+                Start a job
+              </Link>
+              <Link className="btn btn-secondary" href="/jobs">
+                See activity
+              </Link>
             </div>
-          </li>
-        ))}
-      </ol>
+          </div>
+          <div className="hero-art">
+            <HeroIllustration />
+          </div>
+        </div>
+      </section>
+
+      <div className="container">
+        <div className="trust">
+          <span>Money held by PayPal until release</span>
+          <span>AI drafts, never moves money</span>
+          <span>Every decision approved by a person</span>
+          <span>Full audit trail for disputes</span>
+        </div>
+
+        <section className="how">
+          <h2>How it works</h2>
+          <ol className="how-grid">
+            {STEPS.map((step, i) => (
+              <li key={step.title}>
+                <StepIcon name={step.icon} />
+                <span className="how-step">STEP {i + 1}</span>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="split">
+          <div>
+            <h2>For clients</h2>
+            <p className="muted">Pay for outcomes you wrote down, not promises.</p>
+            <ul>
+              <li>Nothing is charged until the work passes and an admin approves the release.</li>
+              <li>Edit the AI&apos;s criteria before you fund. They freeze once money is held.</li>
+              <li>Disagree with a verdict? Appeal before any money moves.</li>
+            </ul>
+          </div>
+          <div>
+            <h2>For freelancers</h2>
+            <p className="muted">Know the money exists before you start.</p>
+            <ul>
+              <li>The hold is visible from day one, with its expiry date.</li>
+              <li>Each criterion is judged separately, with links to the evidence in your diff.</li>
+              <li>Payout goes straight to your PayPal email on release.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { InvalidTransitionError } from "@/server/escrow/state-machine";
 import { createJob, JobError, removeCriterion, runVerification, startFunding, submitWork } from "@/server/jobs/service";
@@ -26,15 +27,33 @@ function messageFor(err: unknown): string {
 
 const back = (path: string, error: string): never => redirect(`${path}?error=${encodeURIComponent(error)}`);
 
-export async function createJobAction(formData: FormData) {
-  const parsed = newJobSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return back("/jobs/new", parsed.error.issues[0]?.message ?? "Invalid input");
+/**
+ * State for forms driven by `useActionState`. On an error the action hands the
+ * typed values back, so the form re-renders with them instead of going blank.
+ */
+export interface FormState {
+  error?: string;
+  values?: Record<string, string>;
+}
+
+const valuesOf = (formData: FormData): Record<string, string> =>
+  Object.fromEntries([...formData].filter(([k, v]) => typeof v === "string" && !k.startsWith("$")).map(([k, v]) => [k, String(v)]));
+
+/** Verify in the background; the job page polls until a verdict lands. */
+function verifyLater(jobId: string) {
+  after(() => runVerification(jobId).catch((err: unknown) => console.error("Verification failed", err)));
+}
+
+export async function createJobAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const values = valuesOf(formData);
+  const parsed = newJobSchema.safeParse(values);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input", values };
 
   let jobId: string;
   try {
     jobId = await createJob(parsed.data);
   } catch (err) {
-    return back("/jobs/new", messageFor(err));
+    return { error: messageFor(err), values };
   }
   redirect(`/jobs/${jobId}`);
 }
@@ -58,22 +77,20 @@ export async function fundAction(jobId: string) {
   redirect(url); // to PayPal; it returns to /jobs/[id]/funded
 }
 
-export async function submitWorkAction(jobId: string, formData: FormData) {
-  const prUrl = String(formData.get("prUrl") ?? "").trim();
+export async function submitWorkAction(jobId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const values = valuesOf(formData);
+  const prUrl = (values.prUrl ?? "").trim();
   try {
     await submitWork(jobId, prUrl);
   } catch (err) {
-    return back(`/jobs/${jobId}`, messageFor(err));
+    return { error: messageFor(err), values };
   }
+  verifyLater(jobId);
   redirect(`/jobs/${jobId}`);
 }
 
 export async function retryVerificationAction(jobId: string) {
-  try {
-    await runVerification(jobId);
-  } catch (err) {
-    return back(`/jobs/${jobId}`, messageFor(err));
-  }
+  verifyLater(jobId);
   redirect(`/jobs/${jobId}`);
 }
 
@@ -82,13 +99,14 @@ const appealSchema = z.object({
   reason: z.string().trim().min(20, "Explain the appeal in at least a sentence").max(3000),
 });
 
-export async function fileAppealAction(jobId: string, formData: FormData) {
-  const parsed = appealSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return back(`/jobs/${jobId}`, parsed.error.issues[0]?.message ?? "Invalid appeal");
+export async function fileAppealAction(jobId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const values = valuesOf(formData);
+  const parsed = appealSchema.safeParse(values);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid appeal", values };
   try {
     await fileAppeal(jobId, parsed.data.raisedBy, parsed.data.reason);
   } catch (err) {
-    return back(`/jobs/${jobId}`, messageFor(err));
+    return { error: messageFor(err), values };
   }
   redirect(`/jobs/${jobId}`);
 }

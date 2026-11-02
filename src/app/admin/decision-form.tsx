@@ -23,7 +23,9 @@ export function DecisionForm({
         <span className="hint">100 = full release · 1–99 = partial (the rest returns to the client) · 0 = refund (void the hold)</span>
       </label>
       <label>
-        Note for the audit trail <span className="muted">(optional)</span>
+        <span>
+          Note for the audit trail <span className="muted">(optional)</span>
+        </span>
         <input name="note" maxLength={1000} placeholder="Why this decision" />
       </label>
       <label className="checkbox">

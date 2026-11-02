@@ -1,4 +1,5 @@
 import { appEnv } from "@/config/env";
+import { BrandMark } from "@/components/illustrations";
 import { SubmitButton } from "@/app/jobs/submit-button";
 import { loginAction } from "../actions";
 
@@ -9,7 +10,10 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
   const enabled = Boolean(appEnv().ADMIN_PASSWORD);
   return (
     <main className="container narrow">
-      <h1>Admin</h1>
+      <section className="card" style={{ marginTop: 24 }}>
+      <h1 style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <BrandMark size={28} /> Admin sign in
+      </h1>
       <p className="muted">Admins approve every release, refund and dispute response.</p>
       {!enabled && <p className="alert">Admin is disabled. Set ADMIN_PASSWORD (12+ characters) in the environment.</p>}
       {error && <p className="alert alert-error">Wrong password.</p>}
@@ -22,6 +26,7 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
           <SubmitButton pending="Checking…">Sign in</SubmitButton>
         </form>
       )}
+      </section>
     </main>
   );
 }
