@@ -12,13 +12,6 @@ export function AppealForm({ jobId }: { jobId: string }) {
     <form action={action} className="form">
       <FormError error={state.error} />
       <label>
-        I am the
-        <select name="raisedBy" defaultValue={v.raisedBy ?? "freelancer"} key={v.raisedBy}>
-          <option value="freelancer">Freelancer</option>
-          <option value="client">Client</option>
-        </select>
-      </label>
-      <label>
         Reason
         <textarea
           name="reason"

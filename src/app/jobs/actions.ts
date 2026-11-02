@@ -3,8 +3,19 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
+import { authorizeJob } from "@/server/auth/guard";
+import { ForbiddenError } from "@/server/auth/policy";
+import { requireUser } from "@/server/auth/session";
 import { InvalidTransitionError } from "@/server/escrow/state-machine";
-import { createJob, JobError, removeCriterion, runVerification, startFunding, submitWork } from "@/server/jobs/service";
+import {
+  acceptInvite,
+  createJob,
+  JobError,
+  removeCriterion,
+  runVerification,
+  startFunding,
+  submitWork,
+} from "@/server/jobs/service";
 import { fileAppeal } from "@/server/jobs/settlement";
 
 const newJobSchema = z.object({
@@ -12,14 +23,12 @@ const newJobSchema = z.object({
   brief: z.string().trim().min(20, "Describe the work in at least a sentence or two").max(5000),
   amount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Amount must look like 100 or 99.50"),
   currency: z.enum(["USD", "EUR", "GBP"]),
-  clientEmail: z.email("Client email is invalid"),
-  freelancerPaypalEmail: z.email("Freelancer PayPal email is invalid"),
   repoUrl: z.union([z.literal(""), z.url().startsWith("https://github.com/", "Repository must be on github.com")]),
 });
 
 /** Turn known, user-facing failures into a message; let real bugs surface. */
 function messageFor(err: unknown): string {
-  if (err instanceof JobError || err instanceof InvalidTransitionError) return err.message;
+  if (err instanceof JobError || err instanceof InvalidTransitionError || err instanceof ForbiddenError) return err.message;
   if (err instanceof Error && /pull request URL/.test(err.message)) return err.message;
   console.error(err);
   return "Something went wrong. Check the server log.";
@@ -45,21 +54,23 @@ function verifyLater(jobId: string) {
 }
 
 export async function createJobAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser("/jobs/new");
   const values = valuesOf(formData);
   const parsed = newJobSchema.safeParse(values);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input", values };
 
   let jobId: string;
   try {
-    jobId = await createJob(parsed.data);
+    jobId = await createJob(parsed.data, { id: user.id, email: user.email, admin: user.admin });
   } catch (err) {
     return { error: messageFor(err), values };
   }
-  redirect(`/jobs/${jobId}`);
+  redirect(`/jobs/${jobId}?created=1`);
 }
 
 export async function removeCriterionAction(jobId: string, criterionId: string) {
   try {
+    await authorizeJob(jobId, "editCriteria");
     await removeCriterion(jobId, criterionId);
   } catch (err) {
     return back(`/jobs/${jobId}`, messageFor(err));
@@ -70,6 +81,7 @@ export async function removeCriterionAction(jobId: string, criterionId: string) 
 export async function fundAction(jobId: string) {
   let url: string;
   try {
+    await authorizeJob(jobId, "fund");
     url = await startFunding(jobId);
   } catch (err) {
     return back(`/jobs/${jobId}`, messageFor(err));
@@ -81,6 +93,7 @@ export async function submitWorkAction(jobId: string, _prev: FormState, formData
   const values = valuesOf(formData);
   const prUrl = (values.prUrl ?? "").trim();
   try {
+    await authorizeJob(jobId, "submitWork");
     await submitWork(jobId, prUrl);
   } catch (err) {
     return { error: messageFor(err), values };
@@ -90,12 +103,16 @@ export async function submitWorkAction(jobId: string, _prev: FormState, formData
 }
 
 export async function retryVerificationAction(jobId: string) {
+  try {
+    await authorizeJob(jobId, "retryVerification");
+  } catch (err) {
+    return back(`/jobs/${jobId}`, messageFor(err));
+  }
   verifyLater(jobId);
   redirect(`/jobs/${jobId}`);
 }
 
 const appealSchema = z.object({
-  raisedBy: z.enum(["client", "freelancer"]),
   reason: z.string().trim().min(20, "Explain the appeal in at least a sentence").max(3000),
 });
 
@@ -104,7 +121,25 @@ export async function fileAppealAction(jobId: string, _prev: FormState, formData
   const parsed = appealSchema.safeParse(values);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid appeal", values };
   try {
-    await fileAppeal(jobId, parsed.data.raisedBy, parsed.data.reason);
+    // Which side is appealing comes from the login, not from the form.
+    const { party } = await authorizeJob(jobId, "appeal");
+    if (!party) throw new JobError("Only the client or the freelancer can appeal.");
+    await fileAppeal(jobId, party, parsed.data.reason);
+  } catch (err) {
+    return { error: messageFor(err), values };
+  }
+  redirect(`/jobs/${jobId}`);
+}
+
+const acceptSchema = z.object({ paypalEmail: z.email("Enter the PayPal email you want to be paid at").max(200) });
+
+export async function acceptInviteAction(jobId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const values = valuesOf(formData);
+  const parsed = acceptSchema.safeParse(values);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid email", values };
+  try {
+    const { user } = await authorizeJob(jobId, "acceptInvite");
+    await acceptInvite(jobId, user.id, parsed.data.paypalEmail.trim().toLowerCase());
   } catch (err) {
     return { error: messageFor(err), values };
   }

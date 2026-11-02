@@ -1,11 +1,9 @@
 "use server";
 
-import { setTimeout as sleep } from "node:timers/promises";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
-import { appEnv } from "@/config/env";
-import { endAdminSession, passwordMatches, requireAdmin, startAdminSession } from "@/server/admin/auth";
+import { requireAdmin } from "@/server/auth/session";
 import { InvalidTransitionError } from "@/server/escrow/state-machine";
 import { PayPalApiError } from "@/server/paypal/client";
 import { draftForDispute, draftMissing, respondToDispute, syncDisputes } from "@/server/disputes/service";
@@ -27,21 +25,6 @@ const decisionSchema = z.object({
   note: z.string().trim().max(1000).default(""),
   confirm: z.literal("yes", { error: "Tick the confirmation box: this moves real (sandbox) money." }),
 });
-
-export async function loginAction(formData: FormData) {
-  const attempt = String(formData.get("password") ?? "");
-  if (!passwordMatches(appEnv().ADMIN_PASSWORD, attempt)) {
-    await sleep(1000); // slow down guessing
-    redirect("/admin/login?error=1");
-  }
-  await startAdminSession();
-  redirect("/admin");
-}
-
-export async function logoutAction() {
-  await endAdminSession();
-  redirect("/admin/login");
-}
 
 export async function settleAction(jobId: string, formData: FormData) {
   await requireAdmin();

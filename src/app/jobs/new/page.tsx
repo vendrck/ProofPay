@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { BriefIllustration } from "@/components/illustrations";
+import { requireUser } from "@/server/auth/session";
 import { NewJobForm } from "./new-job-form";
 
-export default function NewJobPage() {
-  // Dev convenience: prefill the sandbox test accounts so a demo job can't pay a made-up address.
-  const dev = process.env.NODE_ENV !== "production";
-  const defaults = {
-    clientEmail: dev ? process.env.SPIKE_CLIENT_EMAIL : undefined,
-    freelancerEmail: dev ? process.env.SPIKE_FREELANCER_EMAIL : undefined,
-  };
+export const dynamic = "force-dynamic";
+
+export default async function NewJobPage() {
+  await requireUser("/jobs/new");
   return (
     <main className="container">
       <Link href="/jobs" className="back">
@@ -19,7 +17,7 @@ export default function NewJobPage() {
       </div>
       <div className="form-layout">
         <section className="card">
-          <NewJobForm defaults={defaults} />
+          <NewJobForm />
         </section>
         <aside className="aside">
           <BriefIllustration />
@@ -31,6 +29,9 @@ export default function NewJobPage() {
               </li>
               <li>
                 <strong>You fund with PayPal.</strong> It&apos;s a hold on your account, not a charge.
+              </li>
+              <li>
+                <strong>You send the freelancer an invite link.</strong> They accept and add their PayPal email.
               </li>
               <li>
                 <strong>The freelancer submits a pull request</strong> and the AI checks it.

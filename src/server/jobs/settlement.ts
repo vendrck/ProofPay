@@ -90,6 +90,7 @@ async function refundJob(job: Job, reason: string): Promise<void> {
 export async function payOut(job: Job): Promise<void> {
   if (job.payoutBatchId) return;
   if (!job.releasedMinor || !job.captureId) throw new JobError("Nothing has been captured for this job yet.");
+  if (!job.freelancerPaypalEmail) throw new JobError("The freelancer hasn't given a PayPal email yet.");
   try {
     const batch = await payFreelancer(paypal(), {
       jobId: job.id,

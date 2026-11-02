@@ -5,7 +5,7 @@ import { createJobAction, type FormState } from "../actions";
 import { FormError } from "../form-error";
 import { SubmitButton } from "../submit-button";
 
-export function NewJobForm({ defaults }: { defaults: { clientEmail?: string; freelancerEmail?: string } }) {
+export function NewJobForm() {
   const [state, action] = useActionState(createJobAction, {} as FormState);
   const v = state.values ?? {};
   return (
@@ -39,20 +39,6 @@ export function NewJobForm({ defaults }: { defaults: { clientEmail?: string; fre
           </select>
         </label>
       </div>
-      <label>
-        Client email
-        <input name="clientEmail" type="email" required defaultValue={v.clientEmail ?? defaults.clientEmail} />
-      </label>
-      <label>
-        Freelancer PayPal email
-        <input
-          name="freelancerPaypalEmail"
-          type="email"
-          required
-          defaultValue={v.freelancerPaypalEmail ?? defaults.freelancerEmail}
-        />
-        <span className="hint">Payouts go here once the work is released.</span>
-      </label>
       <label>
         <span>
           GitHub repository <span className="muted">(optional)</span>

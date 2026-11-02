@@ -53,11 +53,24 @@ const appSchema = z.object({
   ),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   GITHUB_TOKEN: z.string().optional(),
-  /** Unlocks /admin. Unset = admin disabled. Long, because admins move money. */
-  ADMIN_PASSWORD: z.preprocess(
-    (v) => (v === "" ? undefined : v),
-    z.string().min(12, "ADMIN_PASSWORD must be at least 12 characters").optional(),
+  /** Comma-separated emails that get the admin role (checked on every request). */
+  ADMIN_EMAILS: z.preprocess(
+    (v) => (typeof v === "string" ? v : ""),
+    z.string().transform((v) =>
+      v
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
   ),
+  /** Keys the sign-up IP hashes. Required in production; a fixed value is fine locally. */
+  AUTH_SECRET: z.preprocess(
+    (v) => v || (process.env.NODE_ENV === "production" ? undefined : "dev-only-auth-secret-not-for-production"),
+    z.string().min(32, "AUTH_SECRET must be at least 32 characters (it is required in production)"),
+  ),
+  /** Abuse limits for the public deployment: AI calls cost quota. */
+  JOBS_PER_DAY: z.coerce.number().int().min(1).default(5),
+  SIGNUPS_PER_IP_PER_HOUR: z.coerce.number().int().min(1).default(3),
 });
 
 export type PayPalEnv = z.infer<typeof paypalSchema>;

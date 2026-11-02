@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { JOB_STATUSES } from "@/server/escrow/state-machine";
 
 const id = () => uuid("id").primaryKey().defaultRandom();
@@ -9,6 +9,38 @@ export const jobStatus = pgEnum("job_status", JOB_STATUSES);
 export const criterionCheck = pgEnum("criterion_check", ["ci_pass", "diff_matches", "manual"]);
 export const partyRole = pgEnum("party_role", ["client", "freelancer"]);
 export const adminDecision = pgEnum("admin_decision", ["pending", "approved", "edited", "rejected"]);
+
+/** People who sign in. One account can be the client on some jobs and the freelancer on others. */
+export const users = pgTable(
+  "users",
+  {
+    id: id(),
+    /** Stored lowercased; the unique index makes sign-up race-safe. */
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    /** scrypt$N$r$p$salt$hash (see auth/password.ts). */
+    passwordHash: text("password_hash").notNull(),
+    /** HMAC of the sign-up IP, only for the per-IP sign-up limit. */
+    signupIpHash: text("signup_ip_hash"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("users_email_idx").on(t.email), index("users_signup_ip_idx").on(t.signupIpHash, t.createdAt)],
+);
+
+/** Server-side sessions. The cookie holds a random token; only its SHA-256 is stored. */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: id(),
+    tokenHash: text("token_hash").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("sessions_token_idx").on(t.tokenHash), index("sessions_user_idx").on(t.userId)],
+);
 
 export const jobs = pgTable(
   "jobs",
@@ -20,7 +52,11 @@ export const jobs = pgTable(
     /** Integer minor units (see escrow/money.ts). */
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
     clientEmail: text("client_email").notNull(),
-    freelancerPaypalEmail: text("freelancer_paypal_email").notNull(),
+    /** Set by the freelancer when they accept the invite. */
+    freelancerPaypalEmail: text("freelancer_paypal_email"),
+    /** Null on jobs created before accounts existed (admin-only). */
+    clientUserId: uuid("client_user_id").references(() => users.id, { onDelete: "set null" }),
+    freelancerUserId: uuid("freelancer_user_id").references(() => users.id, { onDelete: "set null" }),
     repoUrl: text("repo_url"),
     status: jobStatus("status").notNull().default("draft"),
     paypalOrderId: text("paypal_order_id"),
@@ -38,7 +74,12 @@ export const jobs = pgTable(
       .defaultNow()
       .$onUpdate(() => sql`now()`),
   },
-  (t) => [index("jobs_status_idx").on(t.status), index("jobs_capture_idx").on(t.captureId)],
+  (t) => [
+    index("jobs_status_idx").on(t.status),
+    index("jobs_capture_idx").on(t.captureId),
+    index("jobs_client_idx").on(t.clientUserId, t.createdAt),
+    index("jobs_freelancer_idx").on(t.freelancerUserId),
+  ],
 );
 
 export const criteria = pgTable("criteria", {

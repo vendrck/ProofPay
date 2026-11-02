@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HeroIllustration, StepIcon } from "@/components/illustrations";
+import { currentUser } from "@/server/auth/session";
 
 const STEPS = [
   { icon: "agree", title: "Agree", body: "AI turns the brief into acceptance criteria both sides can check." },
@@ -10,7 +11,8 @@ const STEPS = [
   { icon: "defend", title: "Defend", body: "Appeals and PayPal disputes get a response drafted from the record." },
 ] as const;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await currentUser();
   return (
     <main>
       <section className="hero-band">
@@ -25,12 +27,25 @@ export default function HomePage() {
               approves the release, and PayPal pays the freelancer out.
             </p>
             <div className="hero-cta">
-              <Link className="btn btn-primary" href="/jobs/new">
-                Start a job
-              </Link>
-              <Link className="btn btn-secondary" href="/jobs">
-                See activity
-              </Link>
+              {user ? (
+                <>
+                  <Link className="btn btn-primary" href="/jobs/new">
+                    Start a job
+                  </Link>
+                  <Link className="btn btn-secondary" href="/jobs">
+                    Your activity
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link className="btn btn-primary" href="/signup?next=/jobs/new">
+                    Start a job
+                  </Link>
+                  <Link className="btn btn-secondary" href="/login">
+                    Log in
+                  </Link>
+                </>
+              )}
             </div>
           </div>
           <div className="hero-art">

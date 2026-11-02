@@ -371,3 +371,14 @@ a:hover { text-decoration: underline; }
   .stats { flex-direction: column; }
   .stats > * + * { border-left: none; border-top: 1px solid var(--border); }
 }
+.auth-title { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.job-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.role-pill { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+.alert-info { background: var(--info-bg); border-color: var(--accent); }
+.copy-row { display: flex; gap: 8px; }
+.copy-row input { flex: 1; min-width: 0; font: inherit; font-size: 0.8rem; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface-2); color: var(--text); }
+.copy-row .btn { min-height: 36px; padding: 4px 16px; }
+.topbar-user { display: flex; align-items: center; gap: 12px; color: #fff; font-weight: 600; font-size: 0.92rem; }
+.topbar-link { background: none; border: none; padding: 0; font: inherit; color: #c9d6ef; cursor: pointer; }
+.topbar-link:hover { color: #fff; }
+.topbar .btn-small { min-height: 32px; padding: 4px 16px; color: #fff; }

@@ -15,6 +15,13 @@
       "when": 1793376052732,
       "tag": "0001_hold_reauthorization",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793608539177,
+      "tag": "0002_accounts",
+      "breakpoints": true
     }
   ]
 }

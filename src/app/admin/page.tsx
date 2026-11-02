@@ -2,12 +2,11 @@ import Link from "next/link";
 import { LocalTime } from "@/components/local-time";
 import { after } from "next/server";
 import { StatusBadge } from "@/app/jobs/status-badge";
-import { requireAdmin } from "@/server/admin/auth";
+import { requireAdmin } from "@/server/auth/session";
 import { displayMoney } from "@/lib/labels";
 import { listDisputeRows } from "@/server/disputes/service";
 import { adminQueue, checkHolds } from "@/server/jobs/settlement";
 import { SubmitButton } from "@/app/jobs/submit-button";
-import { logoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +33,6 @@ export default async function AdminPage() {
             Nothing moves money until you approve it here.
           </p>
         </div>
-        <form action={logoutAction}>
-          <SubmitButton variant="secondary" pending="Signing out…">
-            Sign out
-          </SubmitButton>
-        </form>
       </div>
 
       <div className="stats">

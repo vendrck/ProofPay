@@ -5,6 +5,8 @@ import Script from "next/script";
 import type { ReactNode } from "react";
 import { BrandMark } from "@/components/illustrations";
 import { THEME_SCRIPT, ThemeToggle } from "@/components/theme";
+import { currentUser } from "@/server/auth/session";
+import { logOutAction } from "./account/actions";
 import "./globals.css";
 
 const sans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -14,7 +16,8 @@ export const metadata: Metadata = {
   description: "Escrow for freelance work: AI verifies the delivery, PayPal holds and releases the money.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const user = await currentUser();
   return (
     // suppressHydrationWarning: the theme script sets data-theme on <html> before React hydrates.
     <html lang="en" className={sans.variable} suppressHydrationWarning>
@@ -28,12 +31,34 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <BrandMark />
               ProofPay
             </Link>
-            <Link href="/jobs">Activity</Link>
-            <Link href="/jobs/new">New job</Link>
-            {/* No prefetch: /admin redirects when logged out, and React's dev profiler crashes on that rejected prefetch. */}
-            <Link href="/admin" className="topbar-end" prefetch={false}>
-              Admin
-            </Link>
+            {user && (
+              <>
+                <Link href="/jobs">Activity</Link>
+                <Link href="/jobs/new">New job</Link>
+              </>
+            )}
+            {user?.admin && (
+              // No prefetch: /admin is role-gated, and React's dev profiler crashes on a rejected prefetch.
+              <Link href="/admin" prefetch={false}>
+                Admin
+              </Link>
+            )}
+            <span className="topbar-end" />
+            {user ? (
+              <form action={logOutAction} className="topbar-user">
+                <span title={user.email}>{user.name}</span>
+                <button type="submit" className="topbar-link">
+                  Log out
+                </button>
+              </form>
+            ) : (
+              <>
+                <Link href="/login">Log in</Link>
+                <Link href="/signup" className="btn btn-primary btn-small">
+                  Sign up
+                </Link>
+              </>
+            )}
             <ThemeToggle />
           </nav>
         </header>

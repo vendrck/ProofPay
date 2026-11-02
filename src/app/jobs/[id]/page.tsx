@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { decideAppealAction, retryPayoutAction, settleAction } from "@/app/admin/actions";
 import { DecisionForm } from "@/app/admin/decision-form";
-import { isAdmin } from "@/server/admin/auth";
+import { appEnv } from "@/config/env";
+import { invitePath } from "@/server/auth/invite";
+import { can, partyOf } from "@/server/auth/policy";
+import { requireUser } from "@/server/auth/session";
 import type { AppealRuling } from "@/server/ai/appeal";
 import type { Verification } from "@/server/ai/verify";
 import { displayMoney } from "@/lib/labels";
@@ -16,6 +19,7 @@ import { StatusBadge } from "../status-badge";
 import { SubmitButton } from "../submit-button";
 import { Activity } from "./activity";
 import { AppealForm } from "./appeal-form";
+import { InviteCard } from "./invite-card";
 import { MoneyPanel } from "./money-panel";
 import { Stepper, TurnBanner } from "./progress-tracker";
 import { SubmitWorkForm } from "./submit-work-form";
@@ -31,18 +35,25 @@ export default async function JobPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; funding?: string }>;
+  searchParams: Promise<{ error?: string; funding?: string; created?: string }>;
 }) {
-  const [{ id }, { error, funding }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, funding, created }] = await Promise.all([params, searchParams]);
+  const user = await requireUser(`/jobs/${id}`);
   const view = await getJobView(id).catch((err: unknown) => {
     if (err instanceof JobError) notFound();
     throw err;
   });
   const { job, criteria, latestSubmission, verdict, events } = view;
-  const [admin, appeal] = await Promise.all([isAdmin(), pendingAppeal(job.id)]);
+  const viewer = { userId: user.id, admin: user.admin };
+  // Not a party and not admin: behave as if the job doesn't exist.
+  if (!can(viewer, "view", job)) notFound();
+  const party = partyOf(viewer, job);
+  const admin = user.admin;
+  const appeal = await pendingAppeal(job.id);
   const ruling = appeal?.copilotRuling as (AppealRuling & { model?: string }) | null | undefined;
   const canDecide = job.status === "verified" || job.status === "needs_review";
-  const canAppeal = job.status === "verified" || job.status === "rejected" || job.status === "needs_review";
+  const canAppeal =
+    can(viewer, "appeal", job) && (job.status === "verified" || job.status === "rejected" || job.status === "needs_review");
   const amount = displayMoney(job.amountMinor, job.currency);
   const verification = verdict?.results as Verification | undefined;
   const snapshot = latestSubmission?.snapshot as PrSnapshot | undefined;
@@ -62,7 +73,12 @@ export default async function JobPage({
           <div className="job-title">
             <div>
               <h1>{job.title}</h1>
-              <StatusBadge status={job.status} />
+              <div className="job-meta">
+                <StatusBadge status={job.status} />
+                <span className="role-pill">
+                  {party === "client" ? "You're the client" : party === "freelancer" ? "You're the freelancer" : "Admin view"}
+                </span>
+              </div>
             </div>
             <p className="amount">
               {amount}
@@ -76,6 +92,11 @@ export default async function JobPage({
       <div className="container">
         {error && <p className="alert alert-error">{error}</p>}
         {funding === "cancelled" && <p className="alert">PayPal checkout was cancelled. Nothing was charged.</p>}
+        {created && party === "client" && (
+          <p className="alert alert-info">
+            Job created. Review the criteria, then send the freelancer the invite link on the right.
+          </p>
+        )}
         {run === "running" && <AutoRefresh />}
 
         <div className="job-layout">
@@ -97,7 +118,7 @@ export default async function JobPage({
                   <li key={c.id}>
                     <span className="criterion-text">{c.text}</span>
                     <span className={`tag tag-${c.check}`}>{CHECK_LABEL[c.check]}</span>
-                    {job.status === "draft" && criteria.length > 1 && (
+                    {job.status === "draft" && party === "client" && criteria.length > 1 && (
                       <form action={removeCriterionAction.bind(null, job.id, c.id)}>
                         <SubmitButton variant="link" pending="Removing…">
                           Remove
@@ -111,7 +132,7 @@ export default async function JobPage({
 
             {snapshot && <DeliveryCard snapshot={snapshot} />}
 
-            {(job.status === "funded" || job.status === "rejected") && (
+            {(job.status === "funded" || job.status === "rejected") && party === "freelancer" && (
               <section className="card">
                 <h2>{job.status === "rejected" ? "Resubmit work" : "Submit work"}</h2>
                 <SubmitWorkForm jobId={job.id} />
@@ -128,7 +149,7 @@ export default async function JobPage({
               </section>
             )}
 
-            {job.status === "submitted" && run === "failed" && (
+            {job.status === "submitted" && run === "failed" && can(viewer, "retryVerification", job) && (
               <section className="card">
                 <h2>Verification didn&apos;t finish</h2>
                 <p className="muted">The work is saved. Run the check again.</p>
@@ -188,7 +209,13 @@ export default async function JobPage({
             <TurnBanner progress={progress} />
             <MoneyPanel job={job} />
 
-            {(job.status === "draft" || job.status === "awaiting_payment") && (
+            {!job.freelancerUserId && job.clientUserId && (
+              <InviteCard
+                url={party === "client" ? new URL(invitePath(job.id), appEnv().APP_BASE_URL).toString() : null}
+              />
+            )}
+
+            {(job.status === "draft" || job.status === "awaiting_payment") && party === "client" && (
               <section className="card">
                 <form action={fundAction.bind(null, job.id)}>
                   <SubmitButton variant="paypal" block pending="Opening PayPal…">

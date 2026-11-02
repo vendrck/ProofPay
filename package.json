@@ -21,7 +21,8 @@
     "spike:escrow": "tsx --env-file=.env scripts/spikes/escrow-flow.ts",
     "spike:inspect": "tsx --env-file=.env scripts/spikes/inspect.ts",
     "spike:verify": "tsx --env-file=.env scripts/spikes/verify-pr.ts",
-    "spike:token": "tsx --env-file=.env scripts/spikes/check-credentials.ts"
+    "spike:token": "tsx --env-file=.env scripts/spikes/check-credentials.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.90",

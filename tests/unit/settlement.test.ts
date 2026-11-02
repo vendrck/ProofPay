@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { normalizeRuling } from "@/server/ai/appeal";
-import { passwordMatches, signSession, verifySession } from "@/server/admin/auth";
 import { planSettlement } from "@/server/jobs/settlement";
 
 const usd = (minor: number) => ({ currency: "USD", minor });
@@ -35,27 +34,5 @@ describe("normalizeRuling", () => {
     expect(normalizeRuling({ ...base, outcome: "partial", releasePercent: 100 }).releasePercent).toBe(99);
     expect(normalizeRuling({ ...base, outcome: "partial", releasePercent: 0 }).releasePercent).toBe(1);
     expect(normalizeRuling({ ...base, outcome: "partial", releasePercent: 60 }).releasePercent).toBe(60);
-  });
-});
-
-describe("admin session", () => {
-  const password = "correct horse battery staple";
-  const now = 1_800_000_000_000;
-
-  it("accepts a valid, unexpired session", () => {
-    expect(verifySession(password, signSession(password, now + 1000), now)).toBe(true);
-  });
-  it("rejects expired, tampered or foreign sessions", () => {
-    expect(verifySession(password, signSession(password, now - 1), now)).toBe(false);
-    const token = signSession(password, now + 1000);
-    expect(verifySession(password, token.replace(/^\d+/, String(now + 9_999_999)), now)).toBe(false);
-    expect(verifySession(password, signSession("another password!!", now + 1000), now)).toBe(false);
-    expect(verifySession(password, "garbage", now)).toBe(false);
-    expect(verifySession(undefined, token, now)).toBe(false);
-  });
-  it("checks the password", () => {
-    expect(passwordMatches(password, password)).toBe(true);
-    expect(passwordMatches(password, "wrong")).toBe(false);
-    expect(passwordMatches(undefined, "")).toBe(false);
   });
 });

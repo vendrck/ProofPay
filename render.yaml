@@ -34,7 +34,14 @@ services:
         sync: false
       - key: GITHUB_TOKEN
         sync: false
-      - key: ADMIN_PASSWORD
+      # Accounts: comma-separated admin emails (e.g. admin@demo.dev).
+      - key: ADMIN_EMAILS
+        sync: false
+      # Keys invite links and sign-up IP hashes; Render generates a random value once.
+      - key: AUTH_SECRET
+        generateValue: true
+      # Password for the demo admin made by `npm run seed:demo` (run once from the Render shell).
+      - key: DEMO_ADMIN_PASSWORD
         sync: false
       # APP_BASE_URL is optional here: it falls back to Render's RENDER_EXTERNAL_URL.
 

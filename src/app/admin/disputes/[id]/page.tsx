@@ -3,7 +3,7 @@ import { LocalTime } from "@/components/local-time";
 import { paypalLabel } from "@/lib/labels";
 import { notFound } from "next/navigation";
 import { SubmitButton } from "@/app/jobs/submit-button";
-import { requireAdmin } from "@/server/admin/auth";
+import { requireAdmin } from "@/server/auth/session";
 import { EVIDENCE_NOTES_MAX } from "@/server/ai/dispute";
 import { getDisputeView } from "@/server/disputes/service";
 import { JobError } from "@/server/jobs/store";

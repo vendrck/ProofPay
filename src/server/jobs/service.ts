@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNull, ne, or } from "drizzle-orm";
 import { appEnv } from "@/config/env";
 import { draftCriteria } from "@/server/ai/criteria";
 import { aiModel } from "@/server/ai/model";
@@ -20,15 +20,35 @@ export interface NewJobInput {
   brief: string;
   amount: string;
   currency: string;
-  clientEmail: string;
-  freelancerPaypalEmail: string;
   repoUrl?: string;
 }
 
-/** Create a draft job and let the AI propose acceptance criteria from the brief. */
-export async function createJob(input: NewJobInput): Promise<string> {
+export interface JobCreator {
+  id: string;
+  email: string;
+  admin: boolean;
+}
+
+/**
+ * Create a draft job owned by `client` and let the AI propose acceptance
+ * criteria from the brief. Each job costs an AI call, so non-admins are capped
+ * at JOBS_PER_DAY.
+ */
+export async function createJob(input: NewJobInput, client: JobCreator): Promise<string> {
   const amount = parseMoney(input.amount, input.currency);
   if (amount.minor <= 0) throw new JobError("Amount must be greater than zero.");
+
+  if (!client.admin) {
+    const limit = appEnv().JOBS_PER_DAY;
+    const dayAgo = new Date(Date.now() - 24 * 3600_000);
+    const [recent] = await db()
+      .select({ n: count() })
+      .from(schema.jobs)
+      .where(and(eq(schema.jobs.clientUserId, client.id), gt(schema.jobs.createdAt, dayAgo)));
+    if ((recent?.n ?? 0) >= limit) {
+      throw new JobError(`You can create ${limit} jobs per day on this demo. Try again tomorrow.`);
+    }
+  }
 
   const { id: modelId, model } = aiModel();
   const drafts = await draftCriteria(model, input.brief);
@@ -41,8 +61,8 @@ export async function createJob(input: NewJobInput): Promise<string> {
         brief: input.brief,
         currency: amount.currency,
         amountMinor: amount.minor,
-        clientEmail: input.clientEmail,
-        freelancerPaypalEmail: input.freelancerPaypalEmail,
+        clientEmail: client.email,
+        clientUserId: client.id,
         repoUrl: input.repoUrl || null,
       })
       .returning({ id: schema.jobs.id });
@@ -57,6 +77,29 @@ export async function createJob(input: NewJobInput): Promise<string> {
     ]);
     return job.id;
   });
+}
+
+// ── Invite (the freelancer takes the job) ──────────────────────────────────
+
+/**
+ * The invited freelancer claims the job and says where to be paid. The update
+ * is conditional on the seat still being empty, so two people opening the same
+ * link can't both take it.
+ */
+export async function acceptInvite(jobId: string, userId: string, paypalEmail: string): Promise<void> {
+  const [taken] = await db()
+    .update(schema.jobs)
+    .set({ freelancerUserId: userId, freelancerPaypalEmail: paypalEmail })
+    .where(
+      and(
+        eq(schema.jobs.id, jobId),
+        isNull(schema.jobs.freelancerUserId),
+        or(isNull(schema.jobs.clientUserId), ne(schema.jobs.clientUserId, userId)),
+      ),
+    )
+    .returning({ id: schema.jobs.id });
+  if (!taken) throw new JobError("This invite has already been accepted.");
+  await logEvent(jobId, "freelancer", "freelancer.joined", {});
 }
 
 /** The client removes a criterion before funding (the agreement is frozen once money is held). */
@@ -204,8 +247,15 @@ export async function runVerification(jobId: string): Promise<void> {
 
 // ── Read models for the pages ─────────────────────────────────────────────
 
-export async function listJobs() {
-  return db().query.jobs.findMany({ orderBy: desc(schema.jobs.createdAt), limit: 50 });
+/** Admins see every job; everyone else sees the jobs they are a party to. */
+export async function listJobs(viewer: { userId: string; admin: boolean }) {
+  return db().query.jobs.findMany({
+    where: viewer.admin
+      ? undefined
+      : or(eq(schema.jobs.clientUserId, viewer.userId), eq(schema.jobs.freelancerUserId, viewer.userId)),
+    orderBy: desc(schema.jobs.createdAt),
+    limit: 100,
+  });
 }
 
 export async function getJobView(jobId: string) {

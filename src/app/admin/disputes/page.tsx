@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { paypalLabel } from "@/lib/labels";
 import { SubmitButton } from "@/app/jobs/submit-button";
-import { requireAdmin } from "@/server/admin/auth";
+import { requireAdmin } from "@/server/auth/session";
 import { listDisputeRows, type StoredDraft } from "@/server/disputes/service";
 import { syncDisputesAction } from "../actions";
 
