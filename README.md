@@ -10,7 +10,7 @@ Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (dea
 4. **Release:** an admin approves; PayPal captures the full amount or part of it, and the freelancer is paid out.
 5. **Defend:** a **dispute copilot** drafts responses to platform appeals (before capture) and to PayPal disputes (after capture), using the evidence trail. Nothing is submitted until an admin approves.
 
-> Status: **built locally, not yet deployed.** Tested in the sandbox: funding, AI verification, admin release and payout. Built but not yet clicked through: appeals and submitting a dispute response. See [PLAN.md](PLAN.md) for the schedule.
+> Status: **built locally, not yet deployed.** Tested in the sandbox: funding, AI verification, admin release and payout. Built but not yet clicked through: appeals and submitting a dispute response.
 
 ## How PayPal is used
 
@@ -36,7 +36,6 @@ Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (dea
 
 ```
 .
-├── PLAN.md                     # Hackathon plan and schedule
 ├── docs/
 │   ├── architecture.md         # Components, flows, trust boundaries
 │   ├── sandbox-setup.md        # PayPal sandbox accounts, webhook, spikes
