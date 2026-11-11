@@ -1,6 +1,6 @@
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
-import { structuredCallOptions } from "./model";
+import { DRAFT_TIMEOUT_MS, structuredCallOptions } from "./model";
 
 export const CRITERION_CHECKS = ["ci_pass", "diff_matches", "manual"] as const;
 
@@ -38,6 +38,7 @@ export async function draftCriteria(model: LanguageModel, brief: string): Promis
     system: SYSTEM,
     prompt: `<job_brief>\n${brief}\n</job_brief>`,
     output: Output.object({ schema: criteriaDraftSchema, name: "acceptance_criteria" }),
+    timeout: DRAFT_TIMEOUT_MS,
     providerOptions: structuredCallOptions,
   });
   return output.criteria;

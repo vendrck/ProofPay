@@ -46,6 +46,14 @@ describe("escrow state machine", () => {
     expect(canTransition("released", { type: "ADMIN_REFUNDED" })).toBe(false);
   });
 
+  it("lets an admin take over when the verifier is unavailable", () => {
+    expect(run([{ type: "VERIFICATION_UNAVAILABLE" }, { type: "ADMIN_RELEASED", partial: false }], "submitted")).toBe(
+      "released",
+    );
+    expect(canTransition("funded", { type: "VERIFICATION_UNAVAILABLE" })).toBe(false);
+    expect(canTransition("verified", { type: "VERIFICATION_UNAVAILABLE" })).toBe(false);
+  });
+
   it("never releases money for unverified work", () => {
     for (const from of ["draft", "awaiting_payment", "funded", "submitted", "rejected"] as const) {
       expect(() => transition(from, { type: "ADMIN_RELEASED", partial: false })).toThrow(InvalidTransitionError);

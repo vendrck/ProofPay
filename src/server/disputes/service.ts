@@ -1,4 +1,4 @@
-import { asc, desc, eq, isNull, and } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or } from "drizzle-orm";
 import { paypalEnv } from "@/config/env";
 import {
   type DisputeContext,
@@ -195,7 +195,12 @@ export async function draftForDispute(id: string): Promise<StoredDraft> {
 /** Draft every pending dispute that has no draft yet (after a sync or webhook). */
 export async function draftMissing(limit = 3): Promise<void> {
   const rows = await db().query.disputes.findMany({
-    where: and(eq(schema.disputes.decision, "pending"), isNull(schema.disputes.copilotDraft)),
+    where: and(
+      eq(schema.disputes.decision, "pending"),
+      isNull(schema.disputes.copilotDraft),
+      // Old resolved disputes come back on every sync; drafting for them only burns model quota.
+      or(isNull(schema.disputes.status), ne(schema.disputes.status, "RESOLVED")),
+    ),
     limit,
   });
   for (const row of rows) {

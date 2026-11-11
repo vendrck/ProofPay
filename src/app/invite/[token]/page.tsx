@@ -31,7 +31,12 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         <h1 className="auth-title">
           <BrandMark size={28} /> You&apos;re invited
         </h1>
-        <p className="muted">A client wants to hire you on ProofPay. The money is held by PayPal before you start.</p>
+        <p className="muted">
+          A client wants to hire you on ProofPay.{" "}
+          {job.authorizationId
+            ? "PayPal is already holding the money for this job."
+            : "PayPal holds the money before you start; the client hasn't funded this job yet."}
+        </p>
         <dl className="facts" style={{ margin: "12px 0 16px" }}>
           <dt>Job</dt>
           <dd>
@@ -52,7 +57,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             </Link>
           </div>
         ) : can({ userId: user.id, admin: user.admin }, "acceptInvite", job) ? (
-          <AcceptInviteForm jobId={job.id} defaultEmail={user.email} />
+          <AcceptInviteForm token={token} defaultEmail={user.email} />
         ) : (
           <p className="alert">You can&apos;t accept this invite.</p>
         )}

@@ -118,8 +118,11 @@ export async function retryPayout(jobId: string): Promise<void> {
 
 // ── Appeals ───────────────────────────────────────────────────────────────
 
-/** A party contests the verdict. The AI drafts a ruling; an admin decides. */
-export async function fileAppeal(jobId: string, raisedBy: "client" | "freelancer", reason: string): Promise<void> {
+/**
+ * A party contests the verdict. Returns the appeal id; the caller has the AI
+ * draft a ruling in the background (`draftRuling`), then an admin decides.
+ */
+export async function fileAppeal(jobId: string, raisedBy: "client" | "freelancer", reason: string): Promise<string> {
   const job = await loadJob(jobId);
   if (!canTransition(job.status, { type: "APPEAL_FILED" })) {
     throw new JobError(`This job can't be appealed now (status: ${job.status}).`);
@@ -131,8 +134,7 @@ export async function fileAppeal(jobId: string, raisedBy: "client" | "freelancer
   if (!appeal) throw new Error("Insert returned no row");
   await applyEvent(job, { type: "APPEAL_FILED" });
   await logEvent(jobId, raisedBy, "appeal.filed", { appealId: appeal.id });
-
-  await draftRuling(appeal.id);
+  return appeal.id;
 }
 
 /** Ask the AI for a draft ruling. On failure the admin simply decides without one. */
@@ -187,7 +189,18 @@ export async function decideAppeal(appealId: string, releasePercent: number, not
   const draft = appeal.copilotRuling as AppealRuling | null;
   const followedDraft = draft !== null && draft.releasePercent === releasePercent;
 
-  const plan = await settleJob(appeal.jobId, releasePercent, note || "Appeal decision");
+  let plan: SettlementPlan;
+  let payoutError: unknown;
+  try {
+    plan = await settleJob(appeal.jobId, releasePercent, note || "Appeal decision");
+  } catch (err) {
+    // Captured but the payout failed: the decision still stands. Record it so the
+    // appeal closes and the admin gets "Retry payout" instead of a second decision.
+    const job = await loadJob(appeal.jobId);
+    if (!job.captureId) throw err;
+    payoutError = err;
+    plan = planSettlement(jobMoney(job), releasePercent);
+  }
   await db()
     .update(schema.appeals)
     .set({
@@ -197,6 +210,7 @@ export async function decideAppeal(appealId: string, releasePercent: number, not
     })
     .where(eq(schema.appeals.id, appealId));
   await logEvent(appeal.jobId, "admin", "appeal.decided", { appealId, releasePercent, followedDraft });
+  if (payoutError) throw payoutError;
 }
 
 export async function pendingAppeal(jobId: string) {

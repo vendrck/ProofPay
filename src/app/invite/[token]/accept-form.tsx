@@ -5,8 +5,8 @@ import { acceptInviteAction, type FormState } from "@/app/jobs/actions";
 import { FormError } from "@/app/jobs/form-error";
 import { SubmitButton } from "@/app/jobs/submit-button";
 
-export function AcceptInviteForm({ jobId, defaultEmail }: { jobId: string; defaultEmail: string }) {
-  const [state, action] = useActionState(acceptInviteAction.bind(null, jobId), {} as FormState);
+export function AcceptInviteForm({ token, defaultEmail }: { token: string; defaultEmail: string }) {
+  const [state, action] = useActionState(acceptInviteAction.bind(null, token), {} as FormState);
   return (
     <form action={action} className="form">
       <FormError error={state.error} />

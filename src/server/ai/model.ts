@@ -15,6 +15,13 @@ export const structuredCallOptions = {
   google: { structuredOutputs: true, thinkingConfig: { thinkingLevel: "high" } },
 } as const;
 
+/**
+ * Upper bounds for one structured call. Without them a stalled provider keeps a
+ * form (or a background run) waiting forever instead of failing with a message.
+ */
+export const DRAFT_TIMEOUT_MS = 90_000;
+export const VERIFY_TIMEOUT_MS = 240_000;
+
 /** For quick fact-gathering tool loops (the dispute investigation): speed over depth. */
 export const fastCallOptions = {
   anthropic: { effort: "low" },

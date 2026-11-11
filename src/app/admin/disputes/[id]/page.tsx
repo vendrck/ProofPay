@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LocalTime } from "@/components/local-time";
 import { paypalLabel } from "@/lib/labels";
 import { notFound } from "next/navigation";
+import { AutoRefresh } from "@/app/jobs/auto-refresh";
 import { SubmitButton } from "@/app/jobs/submit-button";
 import { requireAdmin } from "@/server/auth/session";
 import { EVIDENCE_NOTES_MAX } from "@/server/ai/dispute";
@@ -39,6 +40,8 @@ export default async function DisputePage({
         <span className={`badge badge-${pending ? "warn" : "good"}`}>{paypalLabel(live?.status ?? row.status)}</span>
       </div>
       {error && <p className="alert alert-error">{error}</p>}
+      {/* The first draft is written in the background (after a webhook, a sync or "Draft a response"). */}
+      {pending && !draft && <AutoRefresh everyMs={8000} />}
       {drafting && (
         <p className="alert">
           The copilot is investigating and drafting in the background. This can take a few minutes; refresh to see it.
@@ -97,7 +100,9 @@ export default async function DisputePage({
             </p>
           </div>
         ) : (
-          <p className="muted">No draft yet.</p>
+          <p className="muted">
+            {pending ? "No draft yet. If the copilot is working on one, it appears here by itself." : "No draft was made."}
+          </p>
         )}
         {pending && (
           <form action={redraftDisputeAction.bind(null, row.id)}>

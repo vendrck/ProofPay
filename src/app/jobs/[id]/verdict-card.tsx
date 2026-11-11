@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { CriterionVerdict, Verification } from "@/server/ai/verify";
 import type { PrSnapshot } from "@/server/github/pull-request";
+import { describeReviewReason } from "../describe-event";
 
 const VERDICT: Record<CriterionVerdict, { icon: string; label: string }> = {
   pass: { icon: "✓", label: "Meets it" },
@@ -91,7 +92,7 @@ export function VerdictCard({
           <strong>Why a person reviews this:</strong>
           <ul>
             {verification.reviewReasons.map((reason) => (
-              <li key={reason}>{reason}</li>
+              <li key={reason}>{describeReviewReason(reason, criteria)}</li>
             ))}
           </ul>
         </div>

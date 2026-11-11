@@ -6,7 +6,7 @@
                 ┌──────────────────────── Next.js app ────────────────────────┐
  Client  ──────▶│ pages (jobs, admin)          API routes                     │
  Freelancer ───▶│                               ├─ /api/webhooks/paypal ◀─────┼──── PayPal webhooks
- Admin  ───────▶│                               └─ /api/... (jobs, appeals)   │
+ Admin  ───────▶│                               └─ server actions (jobs,…)    │
                 │                                                             │
                 │ server/escrow   state machine + money math (pure)           │
                 │ server/paypal   REST client ───────────────────────────────┼──▶ PayPal REST (sandbox)

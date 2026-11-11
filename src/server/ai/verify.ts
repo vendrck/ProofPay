@@ -3,7 +3,7 @@ import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { PrSnapshot } from "@/server/github/pull-request";
 import type { CRITERION_CHECKS } from "./criteria";
-import { structuredCallOptions } from "./model";
+import { structuredCallOptions, VERIFY_TIMEOUT_MS } from "./model";
 
 export interface Criterion {
   id: string;
@@ -80,6 +80,7 @@ export async function verifySubmission(
       system: SYSTEM,
       prompt: renderPrompt(forModel, snapshot),
       output: Output.object({ schema: modelResultSchema, name: "criterion_verdicts" }),
+      timeout: VERIFY_TIMEOUT_MS,
       providerOptions: structuredCallOptions,
     });
     results.push(...reconcile(forModel, output.results));

@@ -8,6 +8,7 @@ import { InvalidTransitionError } from "@/server/escrow/state-machine";
 import { PayPalApiError } from "@/server/paypal/client";
 import { draftForDispute, draftMissing, respondToDispute, syncDisputes } from "@/server/disputes/service";
 import { decideAppeal, retryPayout, settleJob } from "@/server/jobs/settlement";
+import { escalateToReview } from "@/server/jobs/service";
 import { JobError } from "@/server/jobs/store";
 
 function messageFor(err: unknown): string {
@@ -44,6 +45,17 @@ export async function decideAppealAction(jobId: string, appealId: string, formDa
   if (!parsed.success) return back(jobId, parsed.error.issues[0]?.message ?? "Invalid decision");
   try {
     await decideAppeal(appealId, parsed.data.releasePercent, parsed.data.note);
+  } catch (err) {
+    return back(jobId, messageFor(err));
+  }
+  redirect(`/jobs/${jobId}`);
+}
+
+/** The AI verifier is down: the admin takes the decision over (no money moves yet). */
+export async function escalateAction(jobId: string) {
+  await requireAdmin();
+  try {
+    await escalateToReview(jobId);
   } catch (err) {
     return back(jobId, messageFor(err));
   }

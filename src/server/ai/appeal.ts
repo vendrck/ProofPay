@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
-import { structuredCallOptions } from "./model";
+import { structuredCallOptions, VERIFY_TIMEOUT_MS } from "./model";
 import type { Verification } from "./verify";
 
 export const appealRulingSchema = z.object({
@@ -77,6 +77,7 @@ ${criteria}
 ${input.reason}
 </${tag}>`,
     output: Output.object({ schema: appealRulingSchema, name: "appeal_ruling" }),
+    timeout: VERIFY_TIMEOUT_MS,
     providerOptions: structuredCallOptions,
   });
   return normalizeRuling(output);

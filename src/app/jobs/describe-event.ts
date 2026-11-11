@@ -33,6 +33,8 @@ export function describeEvent(event: TimelineEvent, ctx: EventContext): string {
       const count = num(d.count);
       return count ? `AI drafted ${count} acceptance criteria from the brief` : "AI drafted the acceptance criteria";
     }
+    case "freelancer.joined":
+      return "Freelancer accepted the invite";
     case "criterion.removed":
       return "Client removed a criterion";
     case "order.created":
@@ -59,6 +61,10 @@ export function describeEvent(event: TimelineEvent, ctx: EventContext): string {
       if (overall === "fail") return "AI verified the work: some criteria aren't met";
       return "AI verified the work: some criteria need a human look";
     }
+    case "verification.retried":
+      return "Verification was started again";
+    case "verification.escalated":
+      return "Admin took over the review (the AI verifier was unavailable)";
     case "verification.failed":
       return "AI verification couldn't finish (the verifier was unavailable)";
     case "appeal.filed":
@@ -107,4 +113,12 @@ export function describeEvent(event: TimelineEvent, ctx: EventContext): string {
     default:
       return event.type;
   }
+}
+
+/**
+ * Review reasons are stored with the criterion's database id ("Criterion <uuid> is
+ * uncertain."). Show the number the reader sees in the list instead.
+ */
+export function describeReviewReason(reason: string, criteria: { id: string }[]): string {
+  return criteria.reduce((text, c, i) => text.replaceAll(c.id, String(i + 1)), reason);
 }

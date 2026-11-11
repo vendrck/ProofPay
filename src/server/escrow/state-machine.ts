@@ -5,6 +5,7 @@
  *
  *   draft ─FUND_REQUESTED→ awaiting_payment ─AUTHORIZED→ funded
  *   funded ─WORK_SUBMITTED→ submitted ─VERIFICATION_*→ verified | rejected | needs_review
+ *   submitted ─VERIFICATION_UNAVAILABLE→ needs_review   (the AI is down; an admin decides)
  *   verified/rejected/needs_review ─APPEAL_FILED→ appealed
  *   (verified | needs_review | appealed) ─ADMIN_RELEASED→ released | partially_released
  *   (any held state) ─ADMIN_REFUNDED→ refunded
@@ -38,6 +39,7 @@ export type JobEvent =
   | { type: "VERIFICATION_PASSED" }
   | { type: "VERIFICATION_FAILED" }
   | { type: "VERIFICATION_UNCERTAIN" }
+  | { type: "VERIFICATION_UNAVAILABLE" }
   | { type: "APPEAL_FILED" }
   | { type: "ADMIN_RELEASED"; partial: boolean }
   | { type: "ADMIN_REFUNDED" }
@@ -82,6 +84,7 @@ export function nextStatus(from: JobStatus, event: JobEvent): JobStatus | null {
     case "VERIFICATION_FAILED":
       return from === "submitted" ? "rejected" : null;
     case "VERIFICATION_UNCERTAIN":
+    case "VERIFICATION_UNAVAILABLE":
       return from === "submitted" ? "needs_review" : null;
     case "APPEAL_FILED":
       return REVIEWABLE.has(from) ? "appealed" : null;

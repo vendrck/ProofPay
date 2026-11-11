@@ -9,7 +9,7 @@ import type { JobEvent } from "@/server/escrow/state-machine";
 import { fetchPrSnapshot, type PrSnapshot, parsePrUrl } from "@/server/github/pull-request";
 import { paypal } from "@/server/paypal";
 import { approvalUrl, authorizationFrom, authorizeOrder, createEscrowOrder, getOrder } from "@/server/paypal/payments";
-import { applyEvent, JobError, jobMoney, loadJob, logEvent } from "./store";
+import { applyEvent, type Job, JobError, jobMoney, loadJob, logEvent } from "./store";
 
 export { type Job, JobError, jobMoney } from "./store";
 
@@ -51,7 +51,13 @@ export async function createJob(input: NewJobInput, client: JobCreator): Promise
   }
 
   const { id: modelId, model } = aiModel();
-  const drafts = await draftCriteria(model, input.brief);
+  let drafts;
+  try {
+    drafts = await draftCriteria(model, input.brief);
+  } catch (err) {
+    console.error("Criteria drafting failed", err);
+    throw new JobError("The AI couldn't draft the criteria just now (it timed out or is busy). Nothing was created; try again.");
+  }
 
   return db().transaction(async (tx) => {
     const [job] = await tx
@@ -120,14 +126,21 @@ export async function removeCriterion(jobId: string, criterionId: string): Promi
 export async function startFunding(jobId: string): Promise<string> {
   const job = await loadJob(jobId);
 
+  const base = appEnv().APP_BASE_URL;
+
   // Retry after the client closed the PayPal window: reuse the open order.
   if (job.status === "awaiting_payment" && job.paypalOrderId) {
-    const url = approvalUrl(await getOrder(paypal(), job.paypalOrderId));
+    const order = await getOrder(paypal(), job.paypalOrderId);
+    // Approved at PayPal but the redirect back never reached us: place the hold now.
+    if (order.status === "APPROVED" || order.status === "COMPLETED") {
+      await completeFunding(job.id, job.paypalOrderId);
+      return `${base}/jobs/${job.id}`;
+    }
+    const url = approvalUrl(order);
     if (url) return url;
   }
   if (job.status !== "draft") throw new JobError(`This job can't be funded (status: ${job.status}).`);
 
-  const base = appEnv().APP_BASE_URL;
   const order = await createEscrowOrder(paypal(), {
     jobId: job.id,
     description: `Escrow for: ${job.title}`.slice(0, 127),
@@ -157,10 +170,11 @@ export async function completeFunding(jobId: string, token: string | null): Prom
   if (token !== job.paypalOrderId) throw new JobError("This PayPal approval belongs to a different order.");
 
   const order = await getOrder(paypal(), job.paypalOrderId);
-  if (order.status !== "APPROVED") {
+  if (order.status !== "APPROVED" && order.status !== "COMPLETED") {
     throw new JobError(`PayPal hasn't approved the payment yet (status: ${order.status}).`);
   }
-  const auth = authorizationFrom(await authorizeOrder(paypal(), order.id));
+  // COMPLETED: the hold was already placed (e.g. this request ran twice); read it off the order.
+  const auth = authorizationFrom(order.status === "COMPLETED" ? order : await authorizeOrder(paypal(), order.id));
   if (!auth) throw new Error(`Order ${order.id} authorized but returned no authorization`);
 
   await applyEvent(
@@ -209,6 +223,22 @@ export async function runVerification(jobId: string): Promise<void> {
   if (job.status !== "submitted") throw new JobError(`Nothing to verify (status: ${job.status}).`);
   await logEvent(jobId, "ai", "verification.started");
 
+  try {
+    await verifyLatest(job);
+  } catch (err) {
+    // Whatever broke (model, GitHub data, database), leave a trace so the page offers Retry
+    // instead of showing "AI working" forever. Skip it if another run already finished the job.
+    const now = await loadJob(jobId);
+    if (now.status === "submitted") {
+      await logEvent(jobId, "ai", "verification.failed", { error: err instanceof Error ? err.message : String(err) });
+    }
+    console.error("Verification failed", err);
+    throw new JobError("The AI verifier is unavailable right now. The submission is saved; retry verification shortly.");
+  }
+}
+
+async function verifyLatest(job: Job): Promise<void> {
+  const jobId = job.id;
   const submission = await db().query.submissions.findFirst({
     where: eq(schema.submissions.jobId, jobId),
     orderBy: desc(schema.submissions.createdAt),
@@ -221,13 +251,7 @@ export async function runVerification(jobId: string): Promise<void> {
   const criteria: Criterion[] = rows.map((c) => ({ id: c.id, text: c.text, check: c.check, weight: c.weight }));
 
   const { id: modelId, model } = aiModel();
-  let verification;
-  try {
-    verification = await verifySubmission(model, criteria, submission.snapshot as PrSnapshot);
-  } catch (err) {
-    await logEvent(jobId, "ai", "verification.failed", { error: err instanceof Error ? err.message : String(err) });
-    throw new JobError("The AI verifier is unavailable right now. The submission is saved; retry verification shortly.");
-  }
+  const verification = await verifySubmission(model, criteria, submission.snapshot as PrSnapshot);
 
   await db().insert(schema.verdicts).values({
     submissionId: submission.id,
@@ -243,6 +267,24 @@ export async function runVerification(jobId: string): Promise<void> {
         : { type: "VERIFICATION_UNCERTAIN" };
   const to = await applyEvent(job, event);
   await logEvent(jobId, "ai", "verification.completed", { model: modelId, overall: verification.overall, status: to });
+}
+
+/** The freelancer or an admin asked for another run; recorded so the page shows it as running at once. */
+export async function markVerificationRetried(jobId: string): Promise<void> {
+  const job = await loadJob(jobId);
+  if (job.status !== "submitted") throw new JobError(`Nothing to verify (status: ${job.status}).`);
+  await logEvent(jobId, "ai", "verification.retried");
+}
+
+/**
+ * The verifier is down and won't recover in time: an admin takes the decision
+ * over. The job moves to needs_review without a verdict; money still only moves
+ * on the admin's settle.
+ */
+export async function escalateToReview(jobId: string): Promise<void> {
+  const job = await loadJob(jobId);
+  await applyEvent(job, { type: "VERIFICATION_UNAVAILABLE" });
+  await logEvent(jobId, "admin", "verification.escalated");
 }
 
 // ── Read models for the pages ─────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
 import { authorizeJob } from "@/server/auth/guard";
+import { readInviteToken } from "@/server/auth/invite";
 import { ForbiddenError } from "@/server/auth/policy";
 import { requireUser } from "@/server/auth/session";
 import { InvalidTransitionError } from "@/server/escrow/state-machine";
@@ -11,12 +12,14 @@ import {
   acceptInvite,
   createJob,
   JobError,
+  markVerificationRetried,
   removeCriterion,
   runVerification,
   startFunding,
   submitWork,
 } from "@/server/jobs/service";
-import { fileAppeal } from "@/server/jobs/settlement";
+import { draftRuling, fileAppeal } from "@/server/jobs/settlement";
+import { PayPalApiError } from "@/server/paypal/client";
 
 const newJobSchema = z.object({
   title: z.string().trim().min(3, "Title is too short").max(120),
@@ -30,8 +33,24 @@ const newJobSchema = z.object({
 function messageFor(err: unknown): string {
   if (err instanceof JobError || err instanceof InvalidTransitionError || err instanceof ForbiddenError) return err.message;
   if (err instanceof Error && /pull request URL/.test(err.message)) return err.message;
+  if (err instanceof PayPalApiError) {
+    console.error(err);
+    return `PayPal rejected the request: ${err.message}`;
+  }
+  const github = githubMessage(err);
+  if (github) return github;
   console.error(err);
   return "Something went wrong. Check the server log.";
+}
+
+/** Octokit throws an "HttpError" carrying the HTTP status; say what it means for the freelancer. */
+function githubMessage(err: unknown): string | null {
+  if (!(err instanceof Error) || err.name !== "HttpError") return null;
+  const status = (err as { status?: unknown }).status;
+  if (status === 404) return "GitHub couldn't find that pull request. Check the link; the repository must be public.";
+  if (status === 401 || status === 403) return "GitHub refused to show that pull request (private repository or rate limit). Try again in a minute.";
+  if (typeof status === "number") return `GitHub returned an error (${status}). Try again in a minute.`;
+  return null;
 }
 
 const back = (path: string, error: string): never => redirect(`${path}?error=${encodeURIComponent(error)}`);
@@ -105,6 +124,8 @@ export async function submitWorkAction(jobId: string, _prev: FormState, formData
 export async function retryVerificationAction(jobId: string) {
   try {
     await authorizeJob(jobId, "retryVerification");
+    // Logged before the redirect so the page already shows the run as in progress.
+    await markVerificationRetried(jobId);
   } catch (err) {
     return back(`/jobs/${jobId}`, messageFor(err));
   }
@@ -124,7 +145,9 @@ export async function fileAppealAction(jobId: string, _prev: FormState, formData
     // Which side is appealing comes from the login, not from the form.
     const { party } = await authorizeJob(jobId, "appeal");
     if (!party) throw new JobError("Only the client or the freelancer can appeal.");
-    await fileAppeal(jobId, party, parsed.data.reason);
+    const appealId = await fileAppeal(jobId, party, parsed.data.reason);
+    // The ruling can take a while; draft it after the page has answered.
+    after(() => draftRuling(appealId).catch((err: unknown) => console.error("Appeal ruling failed", err)));
   } catch (err) {
     return { error: messageFor(err), values };
   }
@@ -133,8 +156,11 @@ export async function fileAppealAction(jobId: string, _prev: FormState, formData
 
 const acceptSchema = z.object({ paypalEmail: z.email("Enter the PayPal email you want to be paid at").max(200) });
 
-export async function acceptInviteAction(jobId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+export async function acceptInviteAction(token: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const values = valuesOf(formData);
+  // The signed invite link is what entitles someone to the seat, not knowing the job id.
+  const jobId = readInviteToken(token);
+  if (!jobId) return { error: "This invite link isn't valid.", values };
   const parsed = acceptSchema.safeParse(values);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid email", values };
   try {

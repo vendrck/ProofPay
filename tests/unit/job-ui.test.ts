@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeEvent } from "@/app/jobs/describe-event";
+import { describeEvent, describeReviewReason } from "@/app/jobs/describe-event";
 import { jobProgress, stepState, STEPS, verificationRun } from "@/app/jobs/progress";
 import { JOB_STATUSES } from "@/server/escrow/state-machine";
 import { displayMoney, paypalLabel } from "@/lib/labels";
@@ -50,6 +50,10 @@ describe("verificationRun", () => {
   it("is running right after a submission or a (re)start", () => {
     expect(verificationRun([at("work.submitted", 1)], now)).toBe("running");
     expect(verificationRun([at("work.submitted", 30), at("verification.failed", 20), at("verification.started", 1)], now)).toBe("running");
+  });
+
+  it("is running as soon as a retry was requested", () => {
+    expect(verificationRun([at("work.submitted", 30), at("verification.failed", 20), at("verification.retried", 0)], now)).toBe("running");
   });
 
   it("reports failures, including runs that went silent", () => {
@@ -107,5 +111,30 @@ describe("labels", () => {
     expect(paypalLabel("WAITING_FOR_SELLER_RESPONSE")).toBe("Waiting for us");
     expect(paypalLabel("SOME_NEW_VALUE")).toBe("Some new value");
     expect(paypalLabel(undefined)).toBe("Unknown");
+  });
+});
+
+describe("describeReviewReason", () => {
+  const criteria = [{ id: "7f0c2a52-1111-4222-8333-444455556666" }, { id: "9b1d3e64-aaaa-4bbb-8ccc-ddddeeeeffff" }];
+
+  it("shows the criterion's number instead of its database id", () => {
+    expect(describeReviewReason(`Criterion ${criteria[1]!.id} is uncertain.`, criteria)).toBe("Criterion 2 is uncertain.");
+    expect(describeReviewReason(`Criterion ${criteria[0]!.id}: pass at low confidence (0.60).`, criteria)).toBe(
+      "Criterion 1: pass at low confidence (0.60).",
+    );
+  });
+
+  it("leaves other reasons alone", () => {
+    const reason = "The diff was too large and was truncated before review.";
+    expect(describeReviewReason(reason, criteria)).toBe(reason);
+  });
+});
+
+describe("describeEvent labels added for the demo path", () => {
+  const ctx = { amountMinor: 10000, currency: "USD" };
+  it("never falls back to the raw type for events the app logs", () => {
+    for (const type of ["freelancer.joined", "verification.retried", "verification.escalated"]) {
+      expect(describeEvent({ type, actor: "ai", data: {} }, ctx), type).not.toBe(type);
+    }
   });
 });

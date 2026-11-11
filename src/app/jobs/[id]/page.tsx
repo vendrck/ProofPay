@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { decideAppealAction, retryPayoutAction, settleAction } from "@/app/admin/actions";
+import { decideAppealAction, escalateAction, retryPayoutAction, settleAction } from "@/app/admin/actions";
 import { DecisionForm } from "@/app/admin/decision-form";
 import { appEnv } from "@/config/env";
 import { invitePath } from "@/server/auth/invite";
@@ -27,6 +27,9 @@ import { DeliveryCard } from "./delivery-card";
 import { VerdictCard } from "./verdict-card";
 
 export const dynamic = "force-dynamic";
+
+const isFor = (data: unknown, appealId: string | undefined) =>
+  typeof data === "object" && data !== null && (data as { appealId?: unknown }).appealId === appealId;
 
 const CHECK_LABEL = { ci_pass: "CI", diff_matches: "Code", manual: "Manual" } as const;
 
@@ -59,6 +62,11 @@ export default async function JobPage({
   const snapshot = latestSubmission?.snapshot as PrSnapshot | undefined;
   const run = job.status === "submitted" ? verificationRun(events, new Date()) : "idle";
   const progress = jobProgress(job.status, { verificationFailed: run === "failed" });
+
+  // The ruling is drafted in the background after the appeal is filed.
+  const rulingPending = Boolean(appeal) && !ruling && !events.some((e) => e.type === "appeal.ruling_failed" && isFor(e.data, appeal?.id));
+  // Keep every open job fresh (the other party acts in another window); faster while the AI works.
+  const refreshMs = run === "running" || rulingPending ? 4000 : progress.state === "active" ? 10000 : 0;
 
   const heldNow = job.authorizationId && !job.captureId && job.status !== "refunded" && job.status !== "hold_expired";
   const showAdmin = admin && (canDecide || appeal || (job.captureId && !job.payoutBatchId));
@@ -97,7 +105,7 @@ export default async function JobPage({
             Job created. Review the criteria, then send the freelancer the invite link on the right.
           </p>
         )}
-        {run === "running" && <AutoRefresh />}
+        {refreshMs > 0 && <AutoRefresh everyMs={refreshMs} />}
 
         <div className="job-layout">
           <div>
@@ -153,9 +161,18 @@ export default async function JobPage({
               <section className="card">
                 <h2>Verification didn&apos;t finish</h2>
                 <p className="muted">The work is saved. Run the check again.</p>
-                <form action={retryVerificationAction.bind(null, job.id)}>
-                  <SubmitButton pending="Starting…">Retry verification</SubmitButton>
-                </form>
+                <div className="hero-cta">
+                  <form action={retryVerificationAction.bind(null, job.id)}>
+                    <SubmitButton pending="Starting…">Retry verification</SubmitButton>
+                  </form>
+                  {admin && (
+                    <form action={escalateAction.bind(null, job.id)}>
+                      <SubmitButton variant="secondary" pending="Moving…">
+                        Review it manually
+                      </SubmitButton>
+                    </form>
+                  )}
+                </div>
               </section>
             )}
 
@@ -185,6 +202,8 @@ export default async function JobPage({
                     )}
                     {ruling.model && <p className="small muted">Drafted by {ruling.model}. Awaiting admin decision.</p>}
                   </div>
+                ) : rulingPending ? (
+                  <p className="muted small">The AI is drafting a ruling. This page updates by itself.</p>
                 ) : (
                   <p className="muted small">No AI draft available; the admin decides directly.</p>
                 )}
@@ -193,7 +212,7 @@ export default async function JobPage({
 
             {canAppeal && (
               <section className="card">
-                <h2>Disagree with the verdict?</h2>
+                <h2>{job.status === "verified" ? "Appeal before release" : "Disagree with the verdict?"}</h2>
                 <p className="muted small">
                   Either party can appeal before money moves. The AI drafts a ruling from the criteria and the evidence; an
                   admin makes the final call.
@@ -241,7 +260,7 @@ export default async function JobPage({
                 ) : canDecide ? (
                   <DecisionForm
                     action={settleAction.bind(null, job.id)}
-                    defaultPercent={job.status === "verified" ? 100 : 0}
+                    defaultPercent={100}
                     heldLabel={amount}
                     submitLabel="Settle"
                   />

@@ -22,7 +22,7 @@ export function AppealForm({ jobId }: { jobId: string }) {
           placeholder="Which criterion is judged wrongly, and why?"
         />
       </label>
-      <SubmitButton variant="secondary" pending="Filing appeal and drafting a ruling…">
+      <SubmitButton variant="secondary" pending="Filing appeal…">
         File appeal
       </SubmitButton>
     </form>
