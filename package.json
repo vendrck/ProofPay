@@ -2,6 +2,7 @@
   "name": "proofpay",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "AI-verified escrow with a dispute copilot, built on PayPal",
   "type": "module",
   "engines": {

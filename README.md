@@ -55,6 +55,21 @@ Why authorize-then-capture: the hold is real and visible in PayPal, a partial ca
 - **Dispute copilot:** an agent that calls PayPal's official MCP server to look up orders, disputes, transactions and shipment tracking. It has five read-only tools and no way to move money. See [ADR 0002](docs/decisions/0002-paypal-mcp-for-agent-tools.md).
 - **Pluggable provider:** Gemini (default) or Claude, chosen by environment variable. See [ADR 0003](docs/decisions/0003-pluggable-ai-provider.md).
 
+## Built with
+
+| Area | Technology |
+|---|---|
+| Payments | PayPal developer platform, sandbox: Orders v2, Payments v2, Payouts v1, Disputes v1, Webhooks, and the PayPal MCP server (`@paypal/mcp`) |
+| AI in the product | Google Gemini (`gemini-flash-lite-latest` in the demo) or Anthropic Claude, through the Vercel AI SDK (`ai`, `@ai-sdk/google`, `@ai-sdk/anthropic`, `@ai-sdk/mcp`) |
+| App | Next.js 16 (App Router, server actions), React 19, TypeScript, Zod |
+| Data | PostgreSQL with Drizzle ORM |
+| Delivered-work evidence | GitHub REST API (Octokit): pull request diffs and check runs |
+| Hosting (hackathon sponsor) | **Render**: one web service and one Postgres database, defined in `render.yaml` |
+| Tests | Vitest |
+| AI tools used during development | Claude Code (Anthropic) as a coding assistant |
+
+No other sponsor integrations (APIMatic, Postman, AG Grid) are used.
+
 ## Quick start
 
 Requirements: Node 20+, Docker (for Postgres), a PayPal developer account, and a Gemini or Claude API key.
@@ -144,3 +159,7 @@ npm run dev                   # http://localhost:3000
 - **AI availability.** A busy or rate-limited provider delays criteria drafting and verification. The app reports it and offers a retry; it does not switch models by itself.
 - **Accounts.** Invite links don't expire, and there is no email verification or password reset.
 - **Expired holds.** A PayPal hold that expires ends the job; the client has to create and fund a new one.
+
+## License
+
+[MIT](LICENSE)
