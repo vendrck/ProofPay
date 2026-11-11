@@ -22,6 +22,7 @@
     "spike:inspect": "tsx --env-file=.env scripts/spikes/inspect.ts",
     "spike:verify": "tsx --env-file=.env scripts/spikes/verify-pr.ts",
     "spike:token": "tsx --env-file=.env scripts/spikes/check-credentials.ts",
+    "spike:models": "tsx --env-file=.env scripts/spikes/model-probe.ts",
     "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {

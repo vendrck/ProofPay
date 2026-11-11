@@ -22,3 +22,7 @@ Structured output uses each provider's native JSON-schema mode. Claude's forced-
 - The model id is stored on every verdict, so results stay attributable.
 - Gemini's free tier may use prompts and responses to improve Google's products. For real client code, use a paid tier or Claude.
 - Free-tier rate limits are low. Run AI evals sparingly, or switch to a paid key for bulk testing.
+
+## Update (2026-11-12)
+- Set `AI_MODEL` explicitly in every deployment. The default `gemini-flash-latest` is a moving alias; on the day of the demo it returned "high demand" on every call, while `gemini-flash-lite-latest` answered in 10 to 30 seconds for a full criteria-plus-verification run. `npm run spike:models` measures which models respond.
+- There is no automatic fallback to a second model. A failed call surfaces as a retry in the UI (see "When the AI is unavailable" in [the architecture doc](../architecture.md)).

@@ -25,6 +25,7 @@ Defined in `src/server/escrow/state-machine.ts`. Every status change goes throug
 draft → awaiting_payment → funded → submitted → verified | rejected | needs_review
                                          ▲                    │
                                          └──── resubmit ──────┘ (rejected)
+submitted → needs_review                                             (the AI is unavailable; an admin takes over)
 verified | rejected | needs_review → appealed
 verified | needs_review | appealed → released | partially_released   (admin approves)
 any held state → refunded (void) | hold_expired
@@ -42,7 +43,18 @@ released | partially_released → disputed → dispute_closed
 | Long job | reauthorize once (day 4–29) | Hold renewed |
 | Conceded dispute | refund capture / accept claim | Refunded |
 
-After a capture, the platform pays the freelancer with **Payouts**.
+After a capture, the platform pays the freelancer the captured amount with **Payouts**. PayPal deducts its fee from the capture, so the platform account's balance covers the difference. A payout is recorded as sent when PayPal accepts the request; `payout.failed` is logged, and the admin gets **Retry payout**, when the request itself is rejected.
+
+## When the AI is unavailable
+
+Every AI call has a timeout (90 seconds for drafting criteria, 4 minutes for verification and appeal rulings).
+
+| Step | What happens on failure |
+|---|---|
+| Drafting criteria | The form shows a message and no job is created |
+| Verification | `verification.failed` is logged; either party can **Retry verification**, and an admin can **Review it manually**, which moves the job to `needs_review` |
+| Appeal ruling | The appeal stays open without a draft; the admin decides directly |
+| Dispute draft | The admin can still respond; an empty contest falls back to accepting the claim |
 
 ## Two dispute channels
 

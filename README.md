@@ -1,20 +1,30 @@
 # ProofPay
 
-**Escrow for freelance work. AI verifies the delivery; PayPal holds and releases the money.**
+**Escrow for freelance software work. AI verifies the delivery; PayPal holds and releases the money.**
 
-Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (deadline Nov 12, 2026).
+Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/).
 
-1. **Agree:** AI turns a job brief into acceptance criteria both sides can check.
-2. **Fund:** the client pays with PayPal. The payment is *authorized* (held), not captured.
-3. **Verify:** AI checks the delivered work (a GitHub PR) against every criterion and gives its reasons.
-4. **Release:** an admin approves; PayPal captures the full amount or part of it, and the freelancer is paid out.
-5. **Defend:** a **dispute copilot** drafts responses to platform appeals (before capture) and to PayPal disputes (after capture), using the evidence trail. Nothing is submitted until an admin approves.
+| | |
+|---|---|
+| **Demo video (3 min)** | https://youtu.be/_k0BpKM-qyk |
+| **Live demo (PayPal sandbox)** | https://proofpay-hux0.onrender.com |
+| **Try it yourself** | [docs/demo-walkthrough.md](docs/demo-walkthrough.md): accounts, a ready-made brief and two pull requests, one that passes and one that fails |
 
-> **Live demo (PayPal sandbox):** https://proofpay-hux0.onrender.com
->
-> Sign up as a client, create a job, and send the invite link to a second account (the freelancer). The demo admin is `admin@demo.dev`; its password is in the Devpost submission. Payments use PayPal **sandbox** accounts, so no real money moves.
+## The problem
 
-## Roles and accounts
+Freelancers do the work and don't get paid. Clients pay and get work that doesn't do what was asked. Escrow helps, but someone still has to decide whether the work is done, and that judgement is slow, subjective and easy to argue about.
+
+## What ProofPay does
+
+1. **Agree.** The client describes the job in plain language. AI turns the brief into acceptance criteria that can each be checked: against the code diff, or against the CI run. The criteria freeze once the job is funded.
+2. **Fund.** The client pays with PayPal. The payment is *authorized* (held), not captured, so nothing is charged yet.
+3. **Verify.** The freelancer submits a GitHub pull request. AI checks it against every criterion and gives a reason, the evidence and a confidence for each.
+4. **Release.** An admin approves. PayPal captures the full amount or part of it, and the freelancer is paid out.
+5. **Defend.** A **dispute copilot** drafts rulings for appeals inside the platform (before capture) and evidence for PayPal disputes (after capture), from the job's audit trail. Nothing is submitted until an admin approves.
+
+**The AI drafts, people approve, PayPal moves the money.** No model output moves money by itself.
+
+## Roles
 
 | Role | How you get it | What it can do |
 |---|---|---|
@@ -22,92 +32,80 @@ Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (dea
 | Freelancer | Open the client's invite link, sign up or log in, give a PayPal payout email | Submit a pull request, rerun verification, appeal a verdict |
 | Admin | Email listed in `ADMIN_EMAILS` | Release, partially release or refund; decide appeals; answer PayPal disputes |
 
-A job is visible only to its two parties and to admins. The AI never moves money: every release, refund and dispute response is an admin action with an explicit confirmation.
+A job is visible only to its two parties and to admins.
 
 ## How PayPal is used
 
 | Capability | API | Where |
 |---|---|---|
 | Hold client funds | Orders v2 `intent=AUTHORIZE` → authorize | `src/server/paypal/payments.ts` |
-| Full / partial release | Payments v2 capture with `final_capture` | `src/server/paypal/payments.ts` |
-| Reject / cancel | Void authorization | `src/server/paypal/payments.ts` |
+| Full or partial release | Payments v2 capture with `final_capture` | `src/server/paypal/payments.ts` |
+| Reject or cancel | Void authorization | `src/server/paypal/payments.ts` |
 | Pay the freelancer | Payouts v1 | `src/server/paypal/payouts.ts` |
 | Dispute response | Disputes v1 provide-evidence / accept-claim | `src/server/paypal/disputes.ts` |
-| Real-time events | Webhooks + signature verification | `src/app/api/webhooks/paypal/route.ts` |
-| Agent investigation | **PayPal MCP server** (read-only tools) | `src/server/paypal/mcp.ts` |
+| Real-time events | Webhooks with signature verification | `src/app/api/webhooks/paypal/route.ts` |
+| Agent investigation | **PayPal MCP server**, read-only tools | `src/server/paypal/mcp.ts` |
+
+Why authorize-then-capture: the hold is real and visible in PayPal, a partial capture is a partial release, and a void is a clean refund. See [ADR 0001](docs/decisions/0001-escrow-authorize-then-capture.md).
 
 ## How AI is used
-- An LLM, called through the Vercel AI SDK, drafts acceptance criteria, verifies delivered work, and drafts appeal rulings and dispute evidence. **The provider is pluggable:** set `AI_PROVIDER=google` (Gemini, the default) or `AI_PROVIDER=anthropic` (Claude), and optionally `AI_MODEL`. See [ADR 0003](docs/decisions/0003-pluggable-ai-provider.md).
-- The model never decides money on its own. CI results are judged in code, the overall verdict is computed in code, and anything uncertain or below the confidence floor goes to an admin.
-- The dispute copilot is an agent that calls PayPal's official MCP server to look up orders, disputes, transactions and shipment tracking. **It cannot move money.** See [ADR 0002](docs/decisions/0002-paypal-mcp-for-agent-tools.md).
-  - It drafts either an evidence package (what was agreed, the PR, CI and verification results, the release date from the audit trail) or an accept-claim note. The draft is checked in code: notes are capped at PayPal's 2000 characters, and an empty contest falls back to accepting.
-  - The admin edits and submits it at `/admin/disputes`. The submit checks which actions PayPal currently allows on that dispute.
-  - Disputes arrive by webhook, or by **Sync from PayPal** when no public URL exists (local dev). Drafting runs in the background because a slow model can take minutes. The MCP investigation has a 2-minute budget; without it, the draft uses platform records only.
+
+- **Four jobs:** drafting acceptance criteria, verifying delivered work, drafting appeal rulings, and drafting dispute responses. All go through the Vercel AI SDK with structured output.
+- **Guard rails in code:** CI results are judged in code, the overall verdict is computed in code, and anything uncertain or below the confidence floor goes to an admin. If the AI is unavailable, the job waits with a Retry button and an admin can take it over.
+- **Dispute copilot:** an agent that calls PayPal's official MCP server to look up orders, disputes, transactions and shipment tracking. It has five read-only tools and no way to move money. See [ADR 0002](docs/decisions/0002-paypal-mcp-for-agent-tools.md).
+- **Pluggable provider:** Gemini (default) or Claude, chosen by environment variable. See [ADR 0003](docs/decisions/0003-pluggable-ai-provider.md).
+
+## Quick start
+
+Requirements: Node 20+, Docker (for Postgres), a PayPal developer account, and a Gemini or Claude API key.
+
+```bash
+npm install
+cp .env.example .env          # fill in the values: docs/deployment.md and docs/sandbox-setup.md
+docker compose up -d db       # local Postgres
+npm run db:migrate
+
+npm run spike:token           # check PayPal credentials
+npm run seed:demo             # optional: demo admin (needs DEMO_ADMIN_PASSWORD and ADMIN_EMAILS)
+npm run dev                   # http://localhost:3000
+```
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [Try the live demo](docs/demo-walkthrough.md) | Step-by-step run of the passing job, the failing job with an appeal, and a PayPal dispute |
+| [Architecture](docs/architecture.md) | Components, job lifecycle, money path, the two dispute channels, trust boundaries |
+| [Configuration and deployment](docs/deployment.md) | Every environment variable, deploying to Render, problems we hit and their causes |
+| [PayPal sandbox setup](docs/sandbox-setup.md) | Sandbox app, test accounts, webhooks, testing disputes |
+| [Decision records](docs/decisions/) | Why authorize-then-capture, why the PayPal MCP server, why a pluggable AI provider |
 
 ## Project structure
 
 ```
 .
-├── docs/
-│   ├── architecture.md         # Components, flows, trust boundaries
-│   ├── sandbox-setup.md        # PayPal sandbox accounts, webhook, spikes
-│   └── decisions/              # Architecture decision records (ADRs)
+├── docs/                       # Architecture, setup guides, decision records
 ├── scripts/
 │   ├── seed-demo.ts            # Create or reset the demo admin account
 │   ├── register-webhook.ts     # Register the PayPal webhook for a deployed URL
-│   └── spikes/                 # Runnable sandbox experiments (day 1–2)
+│   └── spikes/                 # Runnable sandbox checks (credentials, escrow path, verifier, models)
 ├── src/
-│   ├── app/                    # Next.js App Router: pages + API route handlers
-│   │   └── api/                # health, PayPal webhooks
+│   ├── app/                    # Next.js App Router: pages, server actions, API routes
+│   │   ├── jobs/               # Client and freelancer UI
+│   │   ├── admin/              # Settlement queue and dispute copilot UI
+│   │   └── api/                # Health check, PayPal webhooks
 │   ├── config/                 # Validated environment variables
 │   └── server/                 # Server-only domain code
 │       ├── ai/                 # Model selection, criteria generator, verifier, appeal and dispute drafts
 │       ├── auth/               # Accounts, sessions, invite links, who-may-do-what policy
-│       ├── db/                 # Drizzle schema + client
+│       ├── db/                 # Drizzle schema, client, migrations
 │       ├── disputes/           # PayPal dispute sync, copilot draft, response
-│       ├── escrow/             # Money math + job state machine (pure, unit-tested)
+│       ├── escrow/             # Money math and job state machine (pure, unit-tested)
 │       ├── github/             # Pull-request evidence snapshot
 │       ├── jobs/               # Job lifecycle: create, fund, verify, settle, appeals, hold renewal
 │       └── paypal/             # REST client, payments, payouts, disputes, webhooks, MCP
-└── tests/
-    └── unit/                   # Vitest unit tests
+└── tests/unit/                 # Vitest unit tests
 ```
-
-UI lives in `src/app/jobs/` (client and freelancer), `src/app/admin/` (queue, settlement, disputes), and `src/app/login`, `signup`, `invite/[token]`, `account` (accounts).
-
-## Getting started
-
-Requirements: Node 20+, Docker (for Postgres), a PayPal developer account.
-
-```bash
-npm install
-cp .env.example .env          # then fill in the values, see docs/sandbox-setup.md
-docker compose up -d db       # local Postgres
-npm run db:generate && npm run db:migrate
-
-npm run spike:token           # check PayPal credentials
-npm run spike:escrow          # authorize → partial capture → payout in the sandbox
-npm run seed:demo             # optional: demo admin (needs DEMO_ADMIN_PASSWORD and ADMIN_EMAILS)
-npm run dev                   # http://localhost:3000
-```
-
-### Environment variables
-
-| Variable | Purpose |
-|---|---|
-| `PAYPAL_ENV`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | PayPal REST app (sandbox) |
-| `PAYPAL_WEBHOOK_ID` | Webhook to verify signatures against; get it from `npm run paypal:webhook -- <public url>` |
-| `AI_PROVIDER`, `AI_MODEL` | `google` (default) or `anthropic`, and an optional model id |
-| `GOOGLE_GENERATIVE_AI_API_KEY` / `ANTHROPIC_API_KEY` | Key for the chosen provider |
-| `GITHUB_TOKEN` | Optional; raises the GitHub rate limit. Delivered work must be a PR on a **public** repository |
-| `DATABASE_URL` | Postgres |
-| `APP_BASE_URL` | Public URL of the app (PayPal redirects back to it). Defaults to Render's URL or `http://localhost:3000` |
-| `AUTH_SECRET` | 32+ characters; keys invite links and sign-up IP hashes. Required in production |
-| `ADMIN_EMAILS` | Comma-separated emails that get the admin role |
-| `DEMO_ADMIN_PASSWORD` | Password `npm run seed:demo` sets for `admin@demo.dev` (which must also be in `ADMIN_EMAILS`) |
-| `JOBS_PER_DAY`, `SIGNUPS_PER_IP_PER_HOUR` | Abuse limits for the public demo (defaults 5 and 3); each job costs an AI call |
-
-Deploying: `render.yaml` is a Render Blueprint (one web service, one Postgres). After the first deploy, run `npm run paypal:webhook -- <url>`, set `PAYPAL_WEBHOOK_ID`, then `npm run seed:demo` from the Render shell.
 
 ## Scripts
 
@@ -119,23 +117,30 @@ Deploying: `render.yaml` is a Render Blueprint (one web service, one Postgres). 
 | `npm run db:generate` / `db:migrate` / `db:studio` | Drizzle migrations |
 | `npm run seed:demo` | Create or reset the demo admin account |
 | `npm run paypal:webhook -- <url>` | Register (or find) the PayPal webhook for a deployed URL and print its id |
-| `npm run spike:verify -- <PR url> "<brief>"` | Draft criteria and verify a real PR with the configured model (no money, no DB) |
-| `npm run spike:token` | Check sandbox credentials + Disputes API access |
-| `npm run spike:escrow [-- --void \| --full]` | Run the escrow money path end-to-end in the sandbox |
+| `npm run spike:token` | Check sandbox credentials and Disputes API access |
+| `npm run spike:escrow [-- --void \| --full]` | Run the escrow money path end to end in the sandbox |
+| `npm run spike:verify -- <PR url> "<brief>"` | Draft criteria and verify a real pull request with the configured model (no money, no database) |
+| `npm run spike:models [-- <rounds>]` | Probe which Gemini models answer reliably right now |
+| `npm run spike:inspect [-- <payoutBatchId>]` | List recent disputes; explain a payout batch |
 
 ## Security
-- Secrets come only from environment variables; `.env` is gitignored.
-- Webhooks are verified with PayPal's signature API before anything is trusted, and each event id is processed once.
-- Every money-moving call sends a stable `PayPal-Request-Id`, so retries are idempotent.
-- The AI drafts, and an admin approves. Money-moving actions are never exposed to the model.
-- Delivered work (PR content) and appeal text are treated as untrusted input to the model.
-- Accounts: passwords are hashed with scrypt; sessions are random tokens stored hashed, in an httpOnly cookie. Every job action checks that the signed-in user is a party to that job (or an admin) before anything else runs.
-- Admin is a role derived from `ADMIN_EMAILS` on every request, and every money decision needs an explicit confirmation.
-- Invite links are an HMAC of the job id under `AUTH_SECRET`; accepting a job requires the signed link, not just the job id.
-- The public demo is rate-limited (sign-ups per IP, jobs per day) because each job costs an AI call.
 
-## Limitations and next steps
-- Delivered work must be a pull request on a public GitHub repository (fine-grained tokens can't read Checks on private ones).
-- Holding client funds for third parties needs licensing in production; here PayPal's authorization hold (up to 29 days, renewed after day 3) stands in for it, in the sandbox only.
-- Invite links don't expire, and there is no email verification or password reset.
-- A PayPal hold that expires ends the job; the client has to create and fund a new one.
+- **Secrets** come only from environment variables; `.env` is gitignored.
+- **Webhooks** are verified with PayPal's signature API before anything is trusted, and each event id is processed once.
+- **Idempotency:** every money-moving call sends a stable `PayPal-Request-Id`, so retries are safe.
+- **The model has no money tools.** It drafts; an admin approves with an explicit confirmation.
+- **Untrusted input:** pull request content and appeal text are treated as untrusted when given to the model.
+- **Accounts:** passwords are hashed with scrypt; sessions are random tokens stored hashed, in an httpOnly cookie. Every job action first checks that the signed-in user is a party to that job or an admin.
+- **Admin** is a role derived from `ADMIN_EMAILS` on every request.
+- **Invite links** are an HMAC of the job id under `AUTH_SECRET`; accepting a job requires the signed link, not just the job id.
+- **Abuse limits:** the public demo limits sign-ups per IP and jobs per account per day, because each job costs AI calls.
+
+## Limitations
+
+- **Public repositories only.** Delivered work must be a pull request on a public GitHub repository; fine-grained tokens can't read Checks on private ones.
+- **Sandbox only.** Holding client funds for third parties needs licensing in production. Here PayPal's authorization hold (up to 29 days, renewed after day 3) stands in for it.
+- **Payout funding.** The freelancer is paid the captured amount, while PayPal deducts its fee from the capture, so the platform account must hold enough balance to cover the fee. In testing, payouts of $100 and $200 arrived; a $10,000 one did not, most likely for this reason.
+- **Payout confirmation.** A payout counts as sent when PayPal accepts the request. If PayPal denies it afterwards, the job page doesn't show that yet.
+- **AI availability.** A busy or rate-limited provider delays criteria drafting and verification. The app reports it and offers a retry; it does not switch models by itself.
+- **Accounts.** Invite links don't expire, and there is no email verification or password reset.
+- **Expired holds.** A PayPal hold that expires ends the job; the client has to create and fund a new one.
